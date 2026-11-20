@@ -1,4 +1,3 @@
-[hydromesh_github_readme.md](https://github.com/user-attachments/files/35179856/hydromesh_github_readme.md)
 # HydroMesh
 
 **HydroMesh** is an interactive, real-time **2D Slice and 3D Tank liquid simulation** built inside a single self-contained HTML file (`HydroMesh.html`). It combines particle-based fluid dynamics, real-time Surface Nets isosurface meshing, two-way rigid-body buoyancy, drivable boat controls with splashing and cockpit detail, and a translucent liquid-glass interface—all running directly in the browser with no build step or backend server. Made with assistance from **Gemini 4 Hydrogen at xhigh effort**.
@@ -8,7 +7,7 @@
 ## Optimisations
 
 - **Single-File Architecture (`HydroMesh.html`):** The entire application—HTML layout, responsive CSS, Three.js scene setup, fluid solver, surface meshing, rigid-body physics, procedural textures, and UI logic—lives in a single `.html` file. You can open it directly or host it anywhere with zero bundler or dependency-management overhead.
-- **~3,000-Line Self-Contained Codebase:** Roughly **~3,000 lines of code** packed into one file, balancing rich visual and physical features with readable, modular sections and a compact project footprint.
+- **~3,000-Line Self-Contained Codebase:** Roughly **~5.5K lines of code** packed into one file, balancing rich visual and physical features with readable, modular sections and a compact project footprint.
 - **Zero-Allocation Typed Arrays (SoA):** Particle positions, previous positions, velocities, density constraints, neighbor lists, spatial hash buckets, and up to 16 rigid-body objects use pre-allocated typed arrays (`Float32Array`, `Int32Array`, `Uint8Array`) to avoid garbage-collection hitches during real-time simulation.
 - **Dual Representation (Droplets to Fused Liquid):** Morph smoothly between discrete instanced spheres (`Liquid Fusion` at `0%`), transitional blending, and a continuous Surface Nets liquid volume (`Pure Liquid` at `100%`) rendered at `0.70` opacity.
 
