@@ -3,6 +3,7 @@
 **HydroMesh** is an interactive, real-time **2D Slice and 3D Tank liquid simulation** built inside a single self-contained HTML file (`HydroMesh.html`). It combines particle-based fluid dynamics, real-time Surface Nets isosurface meshing, two-way rigid-body buoyancy, drivable boat controls with splashing and cockpit detail, and a translucent liquid-glass interface—all running directly in the browser with no build step or backend server. Made with assistance from **Gemini 4 Hydrogen at xhigh effort**.
 
 ---
+<img width="1783" height="1250" alt="image" src="https://github.com/user-attachments/assets/fc312029-e8f6-4282-aed9-5da173089261" />
 
 ## Optimisations
 
