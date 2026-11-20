@@ -1,0 +1,4368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>HydroMesh — 2D/3D Liquid Simulation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --accent: #042c62;
+      --accent-glow: rgba(4, 44, 98, 0.34);
+      --accent-ui: #1d6fe8;
+      --bg-gradient: radial-gradient(circle at 50% 35%, #0c162b 0%, #040811 100%);
+      --panel-bg: rgba(11, 17, 30, 0.90);
+      --border: rgba(148, 163, 184, 0.18);
+      --panel-shadow: 0 18px 44px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --well-bg: rgba(6, 11, 22, 0.78);
+      --well-border: rgba(148, 163, 184, 0.16);
+      --track-bg: rgba(148, 163, 184, 0.25);
+      --thumb-bg: #f8fafc;
+    }
+
+    html.light-theme {
+      --bg-gradient: radial-gradient(circle at 50% 30%, #f5faff 0%, #e1eefc 58%, #cddbef 100%);
+      --panel-bg: rgba(255, 255, 255, 0.94);
+      --border: rgba(15, 23, 42, 0.13);
+      --panel-shadow: 0 16px 38px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.94);
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --well-bg: rgba(241, 245, 249, 0.96);
+      --well-border: rgba(15, 23, 42, 0.11);
+      --track-bg: rgba(15, 23, 42, 0.16);
+      --thumb-bg: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-primary);
+      transition: background 0.35s ease, color 0.25s ease;
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* =========================================================================
+       FLEX APP SHELL ARCHITECTURE: #viewport + #control-panel NEVER OVERLAP
+       ========================================================================= */
+    #app-shell {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #viewport {
+      flex: 1 1 auto;
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    #gl-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+      touch-action: none;
+    }
+
+    .glass-surface {
+      background: var(--panel-bg);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--border);
+      box-shadow: var(--panel-shadow);
+      transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .well-surface {
+      background: var(--well-bg);
+      border: 1px solid var(--well-border);
+      transition: background-color 0.3s ease, border-color 0.3s ease;
+    }
+
+    /* =========================================================================
+       HUD OVERLAYS (Wrapper strictly pointer-events: none; interactive buttons auto)
+       ========================================================================= */
+    #top-hud {
+      position: absolute;
+      top: max(12px, env(safe-area-inset-top));
+      left: max(12px, env(safe-area-inset-left));
+      right: max(12px, env(safe-area-inset-right));
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .hud-brand-pill {
+      pointer-events: none;
+      border-radius: 16px;
+      padding: 6px 12px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .brand-icon-box {
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(2, 100, 214, 0.22);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      color: #38bdf8;
+      flex-shrink: 0;
+    }
+
+    .brand-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .brand-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .hud-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    .badge-fps {
+      background: rgba(16, 185, 129, 0.16);
+      color: #34d399;
+      border: 1px solid rgba(52, 211, 153, 0.28);
+    }
+
+    html.light-theme .badge-fps {
+      color: #059669;
+      border-color: rgba(5, 150, 105, 0.3);
+    }
+
+    .badge-mode {
+      background: rgba(14, 165, 233, 0.16);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.28);
+    }
+
+    html.light-theme .badge-mode {
+      color: #0284c7;
+      border-color: rgba(2, 132, 199, 0.3);
+    }
+
+    .hud-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .hud-btn {
+      pointer-events: auto;
+      touch-action: manipulation;
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-primary);
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .hud-btn:active {
+      transform: scale(0.95);
+    }
+
+    #gesture-hint {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 15;
+      pointer-events: none;
+      width: max-content;
+      max-width: calc(100% - 24px);
+      transition: opacity 0.45s ease, transform 0.45s ease;
+    }
+
+    #gesture-hint.hint-faded {
+      opacity: 0;
+      transform: translate(-50%, 8px);
+    }
+
+    #gesture-hint-text {
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 11px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    /* =========================================================================
+       CONTROL PANEL (EXPLICIT FLEX CHILD: BOTTOM SHEET ON MOBILE, SIDEBAR ON DESKTOP)
+       ========================================================================= */
+    #control-panel {
+      position: relative;
+      z-index: 30;
+      background: var(--panel-bg);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+      pointer-events: auto;
+      transition: max-height 0.28s cubic-bezier(0.22, 1, 0.36, 1), width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    #panel-scroll-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      touch-action: pan-y;
+      padding: 4px 14px calc(14px + env(safe-area-inset-bottom)) 14px;
+    }
+
+    #mobile-scroll-lane {
+      display: none;
+    }
+
+    #panel-scroll-body::-webkit-scrollbar {
+      width: 4px;
+    }
+    #panel-scroll-body::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.28);
+      border-radius: 999px;
+    }
+
+    /* Mobile Layout (< 768px): Bottom Sheet Flex Child */
+    @media (max-width: 767px) {
+      #app-shell {
+        flex-direction: column;
+      }
+
+      #control-panel {
+        flex: 0 0 auto;
+        width: 100%;
+        max-height: 46dvh;
+        border-top: 1px solid var(--border);
+        border-radius: 18px 18px 0 0;
+        box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.32);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+
+      #panel-scroll-wrapper {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+        overflow: hidden;
+      }
+
+      #panel-scroll-body {
+        flex: 1 1 80%;
+        min-width: 0;
+        scrollbar-width: none;
+        padding-right: 10px;
+      }
+
+      #panel-scroll-body::-webkit-scrollbar {
+        display: none;
+      }
+
+      #mobile-scroll-lane {
+        flex: 0 0 20%;
+        width: 20%;
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        padding: 4px 6px calc(14px + env(safe-area-inset-bottom)) 4px;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      #mobile-scroll-track {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        min-height: 48px;
+        border-radius: 12px;
+        background: var(--well-bg);
+        border: 1px solid var(--well-border);
+        touch-action: none;
+      }
+
+      #mobile-scroll-thumb {
+        position: absolute;
+        left: 3px;
+        right: 3px;
+        top: 0;
+        height: 36px;
+        min-height: 36px;
+        border-radius: 9px;
+        background: var(--accent-ui);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.32);
+        touch-action: none;
+        cursor: grab;
+      }
+
+      #mobile-scroll-thumb:active {
+        cursor: grabbing;
+      }
+
+      #control-panel.collapsed {
+        max-height: 56px;
+        overflow: hidden;
+      }
+
+      #control-panel.collapsed #drawer-tabs,
+      #control-panel.collapsed #panel-scroll-wrapper {
+        display: none;
+      }
+
+      #btn-desktop-panel-toggle {
+        display: none;
+      }
+    }
+
+    /* Desktop / Tablet Layout (>= 768px): Right Sidebar Flex Child */
+    @media (min-width: 768px) {
+      #app-shell {
+        flex-direction: row;
+      }
+
+      #control-panel {
+        flex: 0 0 auto;
+        width: 316px;
+        height: 100%;
+        border-left: 1px solid var(--border);
+        box-shadow: -10px 0 32px rgba(0, 0, 0, 0.25);
+        padding-top: max(12px, env(safe-area-inset-top));
+        padding-right: env(safe-area-inset-right);
+      }
+
+      #control-panel.collapsed {
+        width: 0;
+        overflow: hidden;
+        border: none;
+        padding: 0;
+      }
+
+      #mobile-sheet-bar {
+        display: none;
+      }
+
+      #gesture-hint {
+        left: max(16px, env(safe-area-inset-left));
+        bottom: max(16px, env(safe-area-inset-bottom));
+        transform: none;
+      }
+
+      #gesture-hint.hint-faded {
+        transform: translateY(8px);
+      }
+    }
+
+    /* Mobile 56px Quick-Action & Drag Header Bar */
+    #mobile-sheet-bar {
+      height: 56px;
+      min-height: 56px;
+      padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .quick-btn {
+      min-height: 44px;
+      height: 44px;
+      padding: 0 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      touch-action: manipulation;
+      user-select: none;
+    }
+
+    .quick-btn:active {
+      transform: scale(0.96);
+    }
+
+    .quick-btn-primary {
+      background: var(--accent);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+    }
+
+    /* Drawer Tab Switcher */
+    #drawer-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 4px;
+      margin: 4px 14px 8px 14px;
+      border-radius: 14px;
+      flex-shrink: 0;
+    }
+
+    .tab-btn {
+      min-height: 44px;
+      border-radius: 10px;
+      border: none;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      touch-action: manipulation;
+      opacity: 0.75;
+      transition: opacity 0.15s ease, background-color 0.15s ease;
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      color: #ffffff;
+      opacity: 1;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+    }
+
+    .tab-badge {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.22);
+      color: inherit;
+    }
+
+    /* Form Controls, Rows, Segmented Buttons, Sliders & Swatches */
+    .tab-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .seg-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 14px;
+    }
+
+    .seg-grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 14px;
+    }
+
+    .seg-btn {
+      min-height: 44px;
+      border-radius: 10px;
+      border: none;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      touch-action: manipulation;
+      opacity: 0.75;
+      transition: opacity 0.15s ease, background-color 0.15s ease;
+    }
+
+    .seg-btn.active {
+      background: var(--accent);
+      color: #ffffff;
+      opacity: 1;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .control-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      gap: 8px;
+    }
+
+    .control-label {
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      user-select: none;
+    }
+
+    .value-pill {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 7px;
+      user-select: none;
+    }
+
+    /* Touch-isolated Range Sliders (44px hit height, pan-x touch action) */
+    input[type="range"].hydro-range {
+      --pct: 50%;
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 44px;
+      min-height: 44px;
+      background: transparent;
+      cursor: pointer;
+      touch-action: pan-x;
+      margin: -4px 0;
+      pointer-events: auto;
+    }
+
+    input[type="range"].hydro-range:focus {
+      outline: none;
+    }
+
+    input[type="range"].hydro-range::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: linear-gradient(
+        to right,
+        var(--accent-ui) 0%,
+        var(--accent-ui) var(--pct),
+        var(--track-bg) var(--pct),
+        var(--track-bg) 100%
+      );
+    }
+
+    input[type="range"].hydro-range::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--thumb-bg);
+      border: 2.5px solid var(--accent-ui);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.34), 0 0 0 3px var(--accent-glow);
+      margin-top: -8px;
+      transition: transform 0.12s ease;
+    }
+
+    input[type="range"].hydro-range:active::-webkit-slider-thumb {
+      transform: scale(1.15);
+    }
+
+    input[type="range"].hydro-range::-moz-range-track {
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: linear-gradient(
+        to right,
+        var(--accent-ui) 0%,
+        var(--accent-ui) var(--pct),
+        var(--track-bg) var(--pct),
+        var(--track-bg) 100%
+      );
+    }
+
+    input[type="range"].hydro-range::-moz-range-thumb {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--thumb-bg);
+      border: 2.5px solid var(--accent-ui);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.34);
+    }
+
+    .tab-btn.active,
+    .seg-btn.active,
+    .action-btn-primary,
+    .quick-btn-primary {
+      background: var(--accent-ui);
+    }
+
+    .shape-card.active {
+      border-color: var(--accent-ui);
+    }
+
+    /* Single Tactile Water Color Picker Pill */
+    .color-picker-pill {
+      position: relative;
+      height: 46px;
+      min-height: 46px;
+      border-radius: 13px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      cursor: pointer;
+      touch-action: manipulation;
+      overflow: hidden;
+      transition: border-color 0.15s ease, transform 0.12s ease;
+    }
+
+    .color-picker-pill:active {
+      transform: scale(0.985);
+    }
+
+    .color-picker-pill input[type="color"] {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+      border: none;
+      padding: 0;
+      margin: 0;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .color-preview-orb {
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      border: 1.5px solid rgba(255, 255, 255, 0.32);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      flex-shrink: 0;
+    }
+
+    html.light-theme .color-preview-orb {
+      border-color: rgba(15, 23, 42, 0.22);
+    }
+
+    /* Color Swatch Row (Objects Tab) */
+    .swatch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      padding-top: 2px;
+    }
+
+    .swatch-btn {
+      width: 38px;
+      height: 38px;
+      min-width: 38px;
+      min-height: 38px;
+      border-radius: 999px;
+      border: 1.5px solid rgba(255, 255, 255, 0.25);
+      cursor: pointer;
+      touch-action: manipulation;
+      padding: 0;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+      transition: transform 0.12s ease, border-color 0.15s ease;
+    }
+
+    html.light-theme .swatch-btn {
+      border-color: rgba(15, 23, 42, 0.2);
+    }
+
+    .swatch-btn.selected {
+      border: 2.5px solid #ffffff;
+      transform: scale(1.06);
+    }
+
+    html.light-theme .swatch-btn.selected {
+      border-color: #0f172a;
+    }
+
+    .swatch-btn:active {
+      transform: scale(0.92);
+    }
+
+    .custom-color-wrap {
+      position: relative;
+      width: 38px;
+      height: 38px;
+      min-width: 38px;
+      min-height: 38px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .custom-color-wrap input[type="color"] {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      padding: 0;
+      margin: 0;
+      background: transparent;
+      cursor: pointer;
+      opacity: 0;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    /* Shape Cards */
+    .shape-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .shape-card {
+      min-height: 66px;
+      border-radius: 14px;
+      padding: 8px 4px;
+      border: 1px solid var(--well-border);
+      background: var(--well-bg);
+      color: var(--text-primary);
+      font-family: inherit;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      cursor: pointer;
+      touch-action: manipulation;
+      opacity: 0.78;
+      transition: border-color 0.15s ease, opacity 0.15s ease, transform 0.12s ease;
+    }
+
+    .shape-card.active {
+      opacity: 1;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+
+    .shape-card:active {
+      transform: scale(0.96);
+    }
+
+    .shape-card-label {
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1.2;
+      text-align: center;
+    }
+
+    /* Action Buttons */
+    .action-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding-top: 2px;
+    }
+
+    .action-btn {
+      min-height: 44px;
+      border-radius: 13px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      touch-action: manipulation;
+      padding: 0 12px;
+    }
+
+    .action-btn:active {
+      transform: scale(0.96);
+    }
+
+    .action-btn-primary {
+      background: var(--accent);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+    }
+
+    .obj-footer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    /* WebGL Fallback */
+    #webgl-fallback {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(4, 8, 17, 0.92);
+      text-align: center;
+    }
+
+    .fallback-card {
+      border-radius: 18px;
+      padding: 24px;
+      max-width: 340px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app-shell">
+    <!-- Left / Top Flexible 3D Viewport -->
+    <div id="viewport">
+      <canvas id="gl-canvas"></canvas>
+
+      <!-- Compact Top HUD (pointer-events: none wrapper; interactive buttons pointer-events: auto) -->
+      <header id="top-hud">
+        <div class="glass-surface hud-brand-pill">
+          <div class="brand-icon-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" fill="currentColor" fill-opacity="0.28"/>
+              <path d="M7.5 14.5c1.5 1.2 3.5 1.2 5 0s3.5-1.2 5 0"/>
+            </svg>
+          </div>
+          <div class="brand-meta">
+            <span class="brand-title">HydroMesh</span>
+            <span id="hud-fps" class="mono hud-badge badge-fps">60 FPS</span>
+            <span id="hud-mode" class="mono hud-badge badge-mode">3D</span>
+          </div>
+        </div>
+
+        <div class="hud-actions">
+          <button
+            id="btn-theme"
+            type="button"
+            aria-label="Toggle Dark or Light Theme"
+            title="Toggle Dark / Light Theme"
+            class="glass-surface hud-btn">
+            <svg id="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fcd34d" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2M12 20v2m-7.07-15.07 1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+            </svg>
+            <svg id="icon-moon" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+            </svg>
+          </button>
+
+          <button
+            id="btn-desktop-panel-toggle"
+            type="button"
+            aria-label="Toggle Controls Sidebar"
+            title="Toggle Controls Sidebar"
+            class="glass-surface hud-btn">
+            <svg id="icon-sliders" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
+              <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
+              <line x1="2" y1="14" x2="6" y2="14"/><line x1="10" y1="8" x2="14" y2="8"/><line x1="18" y1="16" x2="22" y2="16"/>
+            </svg>
+            <svg id="icon-close" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Auto-Fading Gesture Pill -->
+      <div id="gesture-hint">
+        <div id="gesture-hint-text" class="glass-surface">
+          <span>1-finger: <strong>Magnet</strong></span>
+          <span style="opacity:0.4;">•</span>
+          <span>2-finger: <strong>Orbit</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right / Bottom Explicit Flex-Child Control Panel -->
+    <aside id="control-panel">
+      <!-- Mobile 56px Quick-Action & Expand/Collapse Bar (< 768px) -->
+      <div id="mobile-sheet-bar">
+        <button id="btn-quick-mode" type="button" class="well-surface quick-btn" aria-label="Switch 2D or 3D Mode">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          </svg>
+          <span id="quick-mode-label">3D</span>
+        </button>
+
+        <button id="btn-quick-splash" type="button" class="quick-btn quick-btn-primary" aria-label="Splash Water">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+          </svg>
+          <span>Splash</span>
+        </button>
+
+        <button id="btn-mobile-panel-toggle" type="button" class="well-surface quick-btn" aria-label="Expand or Collapse Controls">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
+            <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
+          </svg>
+          <span id="mobile-toggle-label">Controls</span>
+          <svg id="mobile-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="18 15 12 9 6 15"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Top Tab Switcher: Fluid | Objects -->
+      <div id="drawer-tabs" class="well-surface">
+        <button id="tab-btn-fluid" type="button" class="tab-btn active">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+          </svg>
+          <span>Fluid</span>
+        </button>
+        <button id="tab-btn-objects" type="button" class="tab-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+            <line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+          <span>Objects</span>
+          <span id="tab-obj-badge" class="mono tab-badge hidden">0</span>
+        </button>
+      </div>
+
+      <!-- Scrollable Panel Content -->
+      <div id="panel-scroll-wrapper">
+      <div id="panel-scroll-body">
+        <!-- TAB 1: FLUID SIMULATION CONTROLS -->
+        <div id="panel-fluid" class="tab-stack">
+          <!-- 1. Mode Segmented Toggle -->
+          <div class="well-surface seg-grid-2">
+            <button id="btn-mode-2d" type="button" class="seg-btn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="4" width="16" height="16" rx="2.5"/>
+                <path d="M4 13c2.5-1.5 5.5 1.5 8 0s5.5 1.5 8 0"/>
+              </svg>
+              <span>2D Slice</span>
+            </button>
+            <button id="btn-mode-3d" type="button" class="seg-btn active">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                <line x1="12" y1="22.08" x2="12" y2="12"/>
+              </svg>
+              <span>3D Tank</span>
+            </button>
+          </div>
+
+          <!-- 2. Liquid Fusion (0% - 100%, default 100%) -->
+          <div class="control-group">
+            <div class="control-header">
+              <label for="slider-fusion" class="control-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.8;">
+                  <path d="M8 3.5l3.5 3.5a5 5 0 1 1-7 0z"/>
+                  <path d="M16.5 9.5l3 3a4.2 4.2 0 1 1-6 0z"/>
+                </svg>
+                <span>Liquid Fusion</span>
+              </label>
+              <span id="pill-fusion" class="mono value-pill well-surface">Pure Liquid</span>
+            </div>
+            <input id="slider-fusion" class="hydro-range" type="range" min="0" max="100" step="1" value="100" />
+          </div>
+
+          <!-- 3. Amount (10% - 90%, default 62%) -->
+          <div class="control-group">
+            <div class="control-header">
+              <label for="slider-amount" class="control-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.8;">
+                  <path d="M5 3v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3"/>
+                  <path d="M5 12h14"/>
+                </svg>
+                <span>Amount</span>
+              </label>
+              <span id="pill-amount" class="mono value-pill well-surface">62%</span>
+            </div>
+            <input id="slider-amount" class="hydro-range" type="range" min="10" max="90" step="1" value="62" />
+          </div>
+
+          <!-- 4. Waves (0% - 100%, default 0%) -->
+          <div class="control-group">
+            <div class="control-header">
+              <label for="slider-waves" class="control-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.8;">
+                  <path d="M2 10c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>
+                  <path d="M2 16c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>
+                </svg>
+                <span>Waves</span>
+              </label>
+              <span id="pill-waves" class="mono value-pill well-surface">0%</span>
+            </div>
+            <input id="slider-waves" class="hydro-range" type="range" min="0" max="100" step="1" value="0" />
+          </div>
+
+          <!-- 5. Magnet Force (0% - 100%, default 65%) -->
+          <div class="control-group">
+            <div class="control-header">
+              <label for="slider-magnet" class="control-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.8;">
+                  <path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15"/>
+                  <path d="m5 8 4 4"/><path d="m12 15 4 4"/>
+                </svg>
+                <span>Magnet Force</span>
+              </label>
+              <span id="pill-magnet" class="mono value-pill well-surface">65%</span>
+            </div>
+            <input id="slider-magnet" class="hydro-range" type="range" min="0" max="100" step="1" value="65" />
+          </div>
+
+          <!-- 6. Detail (Low / Med / High particle count) -->
+          <div class="control-group">
+            <div class="control-header">
+              <label for="slider-detail" class="control-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.8;">
+                  <circle cx="7" cy="7" r="2"/><circle cx="17" cy="7" r="2"/>
+                  <circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>
+                </svg>
+                <span>Detail</span>
+              </label>
+              <span id="pill-detail" class="mono value-pill well-surface">Med · 2,000</span>
+            </div>
+            <input id="slider-detail" class="hydro-range" type="range" min="0" max="100" step="5" value="55" />
+          </div>
+
+          <!-- 7. Single Tactile Water Color Picker Pill -->
+          <div class="control-group">
+            <div class="control-header">
+              <label for="input-custom-color" class="control-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.82;">
+                  <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
+                  <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>
+                  <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>
+                  <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
+                  <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+                </svg>
+                <span>Water Color</span>
+              </label>
+              <span style="font-size:10px; opacity:0.65;">Tap to tint</span>
+            </div>
+
+            <div class="well-surface color-picker-pill">
+              <div style="display:flex; align-items:center; gap:10px; pointer-events:none;">
+                <span id="water-color-orb" class="color-preview-orb" style="background:#042c62;"></span>
+                <span id="pill-color" class="mono" style="font-size:12px; font-weight:600; letter-spacing:0.03em;">#042C62</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:5px; font-size:11px; font-weight:600; opacity:0.78; pointer-events:none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m2 22 1-1h3l9-9"/>
+                  <path d="M3 21v-3l9-9"/>
+                  <path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/>
+                </svg>
+                <span>Pick</span>
+              </div>
+              <input id="input-custom-color" type="color" value="#042c62" aria-label="Pick Water Color" />
+            </div>
+          </div>
+
+          <!-- 8. Bottom Action Row: Splash & Reset -->
+          <div class="action-grid-2">
+            <button id="btn-splash" type="button" class="action-btn action-btn-primary">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+                <path d="M8 14a4 4 0 0 0 4 4"/>
+              </svg>
+              <span>Splash</span>
+            </button>
+
+            <button id="btn-reset" type="button" class="well-surface action-btn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+              </svg>
+              <span>Reset</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- TAB 2: OBJECTS DESIGNER & PLACEMENT CONTROLS -->
+        <div id="panel-objects" class="tab-stack hidden">
+          <!-- 1. Shape Selector -->
+          <div class="control-group">
+            <div class="control-header" style="margin-bottom:4px;">
+              <span class="control-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.82;">
+                  <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                  <polyline points="2 17 12 22 22 17"/>
+                  <polyline points="2 12 12 17 22 12"/>
+                </svg>
+                <span>Object Shape</span>
+              </span>
+              <span id="pill-obj-shape" class="mono value-pill well-surface">Buoy Sphere</span>
+            </div>
+            <div class="shape-grid">
+              <button type="button" data-shape="sphere" class="shape-card active">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="8.5"/>
+                  <path d="M4.2 9.5c4.5 1.8 11.1 1.8 15.6 0"/>
+                  <path d="M4.2 14.5c4.5 1.8 11.1 1.8 15.6 0"/>
+                </svg>
+                <span class="shape-card-label">Buoy Sphere</span>
+              </button>
+
+              <button type="button" data-shape="cube" class="shape-card">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="4" width="16" height="16" rx="3.5"/>
+                  <rect x="7.5" y="7.5" width="9" height="9" rx="1.5"/>
+                  <line x1="4.8" y1="4.8" x2="7.5" y2="7.5"/>
+                  <line x1="19.2" y1="4.8" x2="16.5" y2="7.5"/>
+                  <line x1="4.8" y1="19.2" x2="7.5" y2="16.5"/>
+                  <line x1="19.2" y1="19.2" x2="16.5" y2="16.5"/>
+                </svg>
+                <span class="shape-card-label">Cargo Cube</span>
+              </button>
+
+              <button type="button" data-shape="duck" class="shape-card">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14.5 5.5a3.2 3.2 0 0 1 3.1 2.5l2.4.7-2.1 1.5a4.5 4.5 0 0 1-1.6 1.5c1.6.9 2.7 2.4 2.7 4.2 0 2.5-2.6 4.1-6.5 4.1H9.2C5.6 20 3.5 18 3.5 15.3c0-1.6.8-3 2-3.8l-1.5-2 3.2.6c1-.8 2.4-1.2 4-1.1a3.2 3.2 0 0 1 3.3-3.5z"/>
+                  <circle cx="15.2" cy="7.5" r="0.6" fill="currentColor"/>
+                </svg>
+                <span class="shape-card-label">Rubber Duck</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. Object Size Slider (50% - 200%) -->
+          <div class="control-group">
+            <div class="control-header">
+              <label for="slider-obj-size" class="control-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.8;">
+                  <polyline points="15 3 21 3 21 9"/>
+                  <polyline points="9 21 3 21 3 15"/>
+                  <line x1="21" y1="3" x2="14" y2="10"/>
+                  <line x1="3" y1="21" x2="10" y2="14"/>
+                </svg>
+                <span>Object Size</span>
+              </label>
+              <span id="pill-obj-size" class="mono value-pill well-surface">100%</span>
+            </div>
+            <input id="slider-obj-size" class="hydro-range" type="range" min="50" max="200" step="5" value="100" />
+          </div>
+
+          <!-- 3. Buoyancy Presets -->
+          <div class="control-group">
+            <div class="control-header" style="margin-bottom:4px;">
+              <span class="control-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.8;">
+                  <path d="M12 3v18"/>
+                  <polyline points="8 7 12 3 16 7"/>
+                  <polyline points="8 17 12 21 16 17"/>
+                </svg>
+                <span>Buoyancy</span>
+              </span>
+              <span id="pill-obj-density" class="mono" style="font-size:10px; opacity:0.75;">0.35x Density</span>
+            </div>
+            <div class="well-surface seg-grid-3">
+              <button type="button" data-buoyancy="light" class="seg-btn buoy-btn active" style="font-size:11px;">Light Float</button>
+              <button type="button" data-buoyancy="balanced" class="seg-btn buoy-btn" style="font-size:11px;">Balanced</button>
+              <button type="button" data-buoyancy="heavy" class="seg-btn buoy-btn" style="font-size:11px;">Heavy Sinker</button>
+            </div>
+          </div>
+
+          <!-- 4. Object Color Swatches + Custom (+) Picker -->
+          <div class="control-group">
+            <div class="control-header">
+              <span class="control-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.82;">
+                  <circle cx="12" cy="12" r="9"/>
+                  <circle cx="12" cy="12" r="4"/>
+                </svg>
+                <span>Object Color</span>
+              </span>
+              <span id="pill-obj-color" class="mono" style="font-size:10px; opacity:0.75;">#FACC15</span>
+            </div>
+            <div class="swatch-row">
+              <button type="button" data-objcolor="#facc15" aria-label="Sunny Yellow" title="Sunny Yellow" class="swatch-btn obj-color-dot selected" style="background:#facc15;"></button>
+              <button type="button" data-objcolor="#ef4444" aria-label="Coral Red" title="Coral Red" class="swatch-btn obj-color-dot" style="background:#ef4444;"></button>
+              <button type="button" data-objcolor="#10b981" aria-label="Emerald" title="Emerald" class="swatch-btn obj-color-dot" style="background:#10b981;"></button>
+              <button type="button" data-objcolor="#8b5cf6" aria-label="Violet" title="Violet" class="swatch-btn obj-color-dot" style="background:#8b5cf6;"></button>
+              <button type="button" data-objcolor="#f8fafc" aria-label="Frost White" title="Frost White" class="swatch-btn obj-color-dot" style="background:#f8fafc;"></button>
+
+              <div id="custom-obj-color-swatch" class="custom-color-wrap well-surface" title="Custom Object Color">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" style="pointer-events:none;">
+                  <line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/>
+                </svg>
+                <input id="input-obj-color" type="color" value="#facc15" aria-label="Custom Object Color" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. Interaction Mode Toggle -->
+          <div class="well-surface seg-grid-2">
+            <button id="btn-interact-place" type="button" class="seg-btn active">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+              </svg>
+              <span>Tap to Place</span>
+            </button>
+            <button id="btn-interact-stir" type="button" class="seg-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+              </svg>
+              <span>Stir Water</span>
+            </button>
+          </div>
+
+          <!-- 6. Drop onto Water Button -->
+          <button id="btn-drop-object" type="button" class="action-btn action-btn-primary" style="width:100%; font-weight:700;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v12"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <path d="M5 19c2.5-1.4 4.5 1.4 7 0s4.5-1.4 7 0"/>
+            </svg>
+            <span>Drop onto Water</span>
+          </button>
+
+          <!-- 7. Active Objects Counter & Clear Objects -->
+          <div class="obj-footer-row">
+            <span id="pill-obj-count" class="mono value-pill well-surface" style="padding:10px 10px;">0 / 16 Objects</span>
+            <button id="btn-clear-objects" type="button" class="well-surface action-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+              </svg>
+              <span>Clear Objects</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div id="mobile-scroll-lane" aria-hidden="true">
+        <div id="mobile-scroll-track">
+          <div id="mobile-scroll-thumb"></div>
+        </div>
+      </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- WebGL Fallback Alert -->
+  <div id="webgl-fallback" class="hidden">
+    <div class="glass-surface fallback-card">
+      <h2 style="margin:0 0 8px 0; font-size:18px; font-weight:700;">WebGL Unavailable</h2>
+      <p style="margin:0; font-size:13px; opacity:0.82;">HydroMesh requires hardware-accelerated WebGL to run the real-time 2D and 3D fluid simulation.</p>
+    </div>
+  </div>
+
+  <!-- Three.js r128 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script>
+    (function () {
+      'use strict';
+
+      function initHydroMesh() {
+        if (typeof window.THREE === 'undefined') {
+          document.getElementById('webgl-fallback').classList.remove('hidden');
+          return;
+        }
+
+        // =========================================================================
+        // 1. ZERO-ALLOCATION SoA BUFFERS & SINGLE-PASS CONTIGUOUS NEIGHBOR CACHE
+        // =========================================================================
+        const MAX_PARTICLES = 6000;
+        const MAX_NEIGHBORS = 36;
+        const HASH_SIZE = 16384; // Power of 2
+        const HASH_MASK = HASH_SIZE - 1;
+
+        const HALF_W = 2.6;
+        const HALF_H = 1.9;
+        const HALF_D_3D = 1.45;
+        const HALF_D_2D = 0.24;
+
+        const px = new Float32Array(MAX_PARTICLES);
+        const py = new Float32Array(MAX_PARTICLES);
+        const pz = new Float32Array(MAX_PARTICLES);
+
+        const oldX = new Float32Array(MAX_PARTICLES);
+        const oldY = new Float32Array(MAX_PARTICLES);
+        const oldZ = new Float32Array(MAX_PARTICLES);
+
+        const vx = new Float32Array(MAX_PARTICLES);
+        const vy = new Float32Array(MAX_PARTICLES);
+        const vz = new Float32Array(MAX_PARTICLES);
+
+        const lambda = new Float32Array(MAX_PARTICLES);
+        const deltaX = new Float32Array(MAX_PARTICLES);
+        const deltaY = new Float32Array(MAX_PARTICLES);
+        const deltaZ = new Float32Array(MAX_PARTICLES);
+
+        const head = new Int32Array(HASH_SIZE);
+        const next = new Int32Array(MAX_PARTICLES);
+
+        const nIdx = new Int32Array(MAX_PARTICLES * MAX_NEIGHBORS);
+        const nDist = new Float32Array(MAX_PARTICLES * MAX_NEIGHBORS);
+        const nCount = new Uint8Array(MAX_PARTICLES);
+
+        const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768;
+
+        const sim = {
+          theme: 'dark',
+          activeTab: 'fluid',
+          objectInteractMode: 'place',
+          mode: '3D',
+          halfD: HALF_D_3D,
+          fusion: 1.0,
+          amount: 62,
+          waveIntensity: 0.0,
+          magnetPower: 0.65,
+          detail: isMobile ? 45 : 55,
+          wavePhase: 0.0,
+          smoothWave: 0.0,
+          tankX: 0.0,
+          tankVx: 0.0,
+          tankAx: 0.0,
+          activeCount: 0,
+          targetCount: 0,
+          h: 0.25,
+          h2: 0.0625,
+          invCell: 4.0,
+          restDensity: 65.0,
+          particleRadius: 0.072,
+          poly6Factor: 1.0,
+          spikyGradFactor: -1.0,
+          corrDenom: 1.0,
+          spawnTimer: 0.0,
+          pointerActive: false,
+          grabbedIdx: -1,
+          pointerX: 0,
+          pointerY: 0,
+          pointerZ: 0,
+          prevPointerX: 0,
+          prevPointerY: 0,
+          prevPointerZ: 0,
+          pointerVx: 0,
+          pointerVy: 0,
+          pointerVz: 0,
+          waterHex: '#042c62',
+          waterColor: new THREE.Color('#042c62')
+        };
+
+        const objDesigner = {
+          shape: 'sphere',
+          size: 100,
+          buoyancy: 'light',
+          density: 0.35,
+          color: '#facc15'
+        };
+
+        // =========================================================================
+        // 1B. ZERO-ALLOCATION TWO-WAY RIGID-BODY OBJECT POOL (UP TO 16 OBJECTS)
+        // =========================================================================
+        const MAX_OBJECTS = 16;
+        const SHAPE_SPHERE = 0;
+        const SHAPE_CUBE = 1;
+        const SHAPE_DUCK = 2;
+
+        const objActive = new Uint8Array(MAX_OBJECTS);
+        const objShape = new Uint8Array(MAX_OBJECTS);
+        const objScale = new Float32Array(MAX_OBJECTS);
+        const objDensity = new Float32Array(MAX_OBJECTS);
+        const objVolume = new Float32Array(MAX_OBJECTS);
+        const objMass = new Float32Array(MAX_OBJECTS);
+        const objInvMass = new Float32Array(MAX_OBJECTS);
+        const objInvInertia = new Float32Array(MAX_OBJECTS);
+        const objBoundR = new Float32Array(MAX_OBJECTS);
+
+        const objX = new Float32Array(MAX_OBJECTS);
+        const objY = new Float32Array(MAX_OBJECTS);
+        const objZ = new Float32Array(MAX_OBJECTS);
+
+        const objVx = new Float32Array(MAX_OBJECTS);
+        const objVy = new Float32Array(MAX_OBJECTS);
+        const objVz = new Float32Array(MAX_OBJECTS);
+
+        const objQx = new Float32Array(MAX_OBJECTS);
+        const objQy = new Float32Array(MAX_OBJECTS);
+        const objQz = new Float32Array(MAX_OBJECTS);
+        const objQw = new Float32Array(MAX_OBJECTS);
+
+        const objWx = new Float32Array(MAX_OBJECTS);
+        const objWy = new Float32Array(MAX_OBJECTS);
+        const objWz = new Float32Array(MAX_OBJECTS);
+
+        const objRot = new Float32Array(MAX_OBJECTS * 9);
+        const objMeshes = new Array(MAX_OBJECTS).fill(null);
+
+        // Dense 27-point (3x3x3) local quadrature grid for accurate submerged volume & torque
+        const QUAD_COUNT = 27;
+        const QUAD_PTS = new Float32Array(QUAD_COUNT * 3);
+        (function buildQuadrature27() {
+          const coords = [-0.54, 0.0, 0.54];
+          let idx = 0;
+          for (let iz = 0; iz < 3; iz++) {
+            for (let iy = 0; iy < 3; iy++) {
+              for (let ix = 0; ix < 3; ix++) {
+                QUAD_PTS[idx++] = coords[ix];
+                QUAD_PTS[idx++] = coords[iy];
+                QUAD_PTS[idx++] = coords[iz];
+              }
+            }
+          }
+        })();
+
+        const sdfOut = new Float32Array(4);
+
+        function getShapeBaseRadius(shapeCode) {
+          if (shapeCode === SHAPE_SPHERE) return 0.34;
+          if (shapeCode === SHAPE_CUBE) return 0.32;
+          return 0.36;
+        }
+
+        function updateObjectRotMatrix(m) {
+          const x = objQx[m], y = objQy[m], z = objQz[m], w = objQw[m];
+          const x2 = x + x, y2 = y + y, z2 = z + z;
+          const xx = x * x2, xy = x * y2, xz = x * z2;
+          const yy = y * y2, yz = y * z2, zz = z * z2;
+          const wx = w * x2, wy = w * y2, wz = w * z2;
+          const o = m * 9;
+          objRot[o]     = 1.0 - (yy + zz);
+          objRot[o + 1] = xy + wz;
+          objRot[o + 2] = xz - wy;
+          objRot[o + 3] = xy - wz;
+          objRot[o + 4] = 1.0 - (xx + zz);
+          objRot[o + 5] = yz + wx;
+          objRot[o + 6] = xz + wy;
+          objRot[o + 7] = yz - wx;
+          objRot[o + 8] = 1.0 - (xx + yy);
+        }
+
+        function evalLocalObjectSDF(shapeCode, s, lx, ly, lz, is3D) {
+          const z = is3D ? lz : 0.0;
+          if (shapeCode === SHAPE_SPHERE) {
+            const r = 0.34 * s;
+            const len = Math.hypot(lx, ly, z);
+            if (len > 1e-7) {
+              const inv = 1.0 / len;
+              sdfOut[0] = len - r;
+              sdfOut[1] = lx * inv;
+              sdfOut[2] = ly * inv;
+              sdfOut[3] = z * inv;
+            } else {
+              sdfOut[0] = -r;
+              sdfOut[1] = 0.0;
+              sdfOut[2] = 1.0;
+              sdfOut[3] = 0.0;
+            }
+            return;
+          }
+
+          if (shapeCode === SHAPE_CUBE) {
+            const half = 0.30 * s;
+            const bevel = 0.045 * s;
+            const inner = half - bevel;
+            const qx = Math.abs(lx) - inner;
+            const qy = Math.abs(ly) - inner;
+            const qz = is3D ? (Math.abs(z) - inner) : -1.0;
+
+            const ox = qx > 0.0 ? qx : 0.0;
+            const oy = qy > 0.0 ? qy : 0.0;
+            const oz = qz > 0.0 ? qz : 0.0;
+            const outLen = Math.hypot(ox, oy, oz);
+            const maxQ = Math.max(qx, Math.max(qy, qz));
+            const inDist = maxQ < 0.0 ? maxQ : 0.0;
+
+            sdfOut[0] = outLen + inDist - bevel;
+            if (outLen > 1e-7) {
+              const inv = 1.0 / outLen;
+              sdfOut[1] = (lx >= 0.0 ? 1.0 : -1.0) * ox * inv;
+              sdfOut[2] = (ly >= 0.0 ? 1.0 : -1.0) * oy * inv;
+              sdfOut[3] = is3D ? ((z >= 0.0 ? 1.0 : -1.0) * oz * inv) : 0.0;
+            } else if (qx >= qy && qx >= qz) {
+              sdfOut[1] = lx >= 0.0 ? 1.0 : -1.0;
+              sdfOut[2] = 0.0;
+              sdfOut[3] = 0.0;
+            } else if (qy >= qz) {
+              sdfOut[1] = 0.0;
+              sdfOut[2] = ly >= 0.0 ? 1.0 : -1.0;
+              sdfOut[3] = 0.0;
+            } else {
+              sdfOut[1] = 0.0;
+              sdfOut[2] = 0.0;
+              sdfOut[3] = z >= 0.0 ? 1.0 : -1.0;
+            }
+            return;
+          }
+
+          // SHAPE_DUCK: Multi-Ellipsoid Union (Body + Head + Tail)
+          const bx = lx + 0.04 * s;
+          const by = ly + 0.06 * s;
+          const bz = z;
+          const irx = 1.0 / (0.37 * s);
+          const iry = 1.0 / (0.25 * s);
+          const irz = 1.0 / (0.28 * s);
+          const k0 = Math.hypot(bx * irx, by * iry, bz * irz);
+          const k1 = Math.hypot(bx * irx * irx, by * iry * iry, bz * irz * irz);
+          let bestPhi = k0 > 1e-6 ? (k0 * (k0 - 1.0) / Math.max(1e-6, k1)) : (-0.25 * s);
+          let bestNx = bx * irx * irx;
+          let bestNy = by * iry * iry;
+          let bestNz = bz * irz * irz;
+          const nLen = Math.hypot(bestNx, bestNy, bestNz);
+          if (nLen > 1e-7) {
+            bestNx /= nLen; bestNy /= nLen; bestNz /= nLen;
+          } else {
+            bestNx = 0.0; bestNy = 1.0; bestNz = 0.0;
+          }
+
+          const hx = lx - 0.20 * s;
+          const hy = ly - 0.21 * s;
+          const hz = z;
+          const hLen = Math.hypot(hx, hy, hz);
+          const hPhi = hLen - 0.185 * s;
+          if (hPhi < bestPhi) {
+            bestPhi = hPhi;
+            if (hLen > 1e-7) {
+              bestNx = hx / hLen; bestNy = hy / hLen; bestNz = hz / hLen;
+            } else {
+              bestNx = 0.0; bestNy = 1.0; bestNz = 0.0;
+            }
+          }
+
+          const tx = lx + 0.34 * s;
+          const ty = ly - 0.06 * s;
+          const tz = z;
+          const tLen = Math.hypot(tx, ty, tz);
+          const tPhi = tLen - 0.125 * s;
+          if (tPhi < bestPhi) {
+            bestPhi = tPhi;
+            if (tLen > 1e-7) {
+              bestNx = tx / tLen; bestNy = ty / tLen; bestNz = tz / tLen;
+            } else {
+              bestNx = -0.7; bestNy = 0.7; bestNz = 0.0;
+            }
+          }
+
+          sdfOut[0] = bestPhi;
+          sdfOut[1] = bestNx;
+          sdfOut[2] = bestNy;
+          sdfOut[3] = bestNz;
+        }
+
+        function projectParticlesOutOfObjects(n, is3D, applyImpulse) {
+          const pad = sim.particleRadius * 0.88;
+          for (let m = 0; m < MAX_OBJECTS; m++) {
+            if (!objActive[m]) continue;
+            const shapeCode = objShape[m];
+            const s = objScale[m];
+            const broadR = objBoundR[m] + pad;
+            const broadR2 = broadR * broadR;
+
+            const ox = objX[m], oy = objY[m], oz = objZ[m];
+            const o = m * 9;
+            const r00 = objRot[o],     r01 = objRot[o + 1], r02 = objRot[o + 2];
+            const r10 = objRot[o + 3], r11 = objRot[o + 4], r12 = objRot[o + 5];
+            const r20 = objRot[o + 6], r21 = objRot[o + 7], r22 = objRot[o + 8];
+
+            for (let i = 0; i < n; i++) {
+              const dx = px[i] - ox;
+              const dy = py[i] - oy;
+              const dz = is3D ? (pz[i] - oz) : 0.0;
+              if (dx * dx + dy * dy + dz * dz > broadR2) continue;
+
+              const lx = r00 * dx + r01 * dy + r02 * dz;
+              const ly = r10 * dx + r11 * dy + r12 * dz;
+              const lz = is3D ? (r20 * dx + r21 * dy + r22 * dz) : 0.0;
+
+              evalLocalObjectSDF(shapeCode, s, lx, ly, lz, is3D);
+              const phi = sdfOut[0];
+              if (phi < pad) {
+                const pen = pad - phi;
+                const nlx = sdfOut[1], nly = sdfOut[2], nlz = sdfOut[3];
+
+                let wx = r00 * nlx + r10 * nly + r20 * nlz;
+                let wy = r01 * nlx + r11 * nly + r21 * nlz;
+                let wz = is3D ? (r02 * nlx + r12 * nly + r22 * nlz) : 0.0;
+                const wLen = Math.hypot(wx, wy, wz);
+                if (wLen > 1e-7) {
+                  wx /= wLen; wy /= wLen; wz /= wLen;
+                } else {
+                  wy = 1.0;
+                }
+
+                px[i] += wx * pen;
+                py[i] += wy * pen;
+                if (is3D) pz[i] += wz * pen;
+
+                if (applyImpulse) {
+                  const react = pen * 0.018 * objInvMass[m];
+                  objVx[m] -= wx * react;
+                  objVy[m] -= wy * react;
+                  if (is3D) objVz[m] -= wz * react;
+                }
+              }
+            }
+          }
+        }
+
+        function stepRigidObjects(dt, n, is3D) {
+          const invCell = sim.invCell;
+          const h = sim.h;
+          const h2 = sim.h2;
+          const poly6Factor = sim.poly6Factor;
+          const invRestDensity = 1.0 / sim.restDensity;
+          const poly6Self = poly6Factor * h2 * h2 * h2;
+          const zMinOff = is3D ? -1 : 0;
+          const zMaxOff = is3D ? 1 : 0;
+          const gravityY = -9.8;
+          const inertialAx = -sim.tankAx;
+
+          let sumPy = 0.0;
+          let sumPxPy = 0.0;
+          let sumPx2 = 0.0;
+          for (let i = 0; i < n; i++) {
+            sumPy += py[i];
+            sumPxPy += px[i] * py[i];
+            sumPx2 += px[i] * px[i];
+          }
+          const meanPy = n > 0 ? (sumPy / n) : (-HALF_H + (HALF_H * 2.0) * (sim.amount / 100.0) * 0.5);
+          const surfSlopeX = sumPx2 > 1e-4 ? Math.max(-0.45, Math.min(0.45, (sumPxPy / sumPx2) * 2.0)) : 0.0;
+          const baseWaterTopY = Math.min(HALF_H, -HALF_H + Math.max(0.08, (meanPy + HALF_H) * 2.0));
+
+          for (let m = 0; m < MAX_OBJECTS; m++) {
+            if (!objActive[m]) continue;
+            updateObjectRotMatrix(m);
+
+            const s = objScale[m];
+            const shapeCode = objShape[m];
+            const rScale = getShapeBaseRadius(shapeCode) * s;
+            const mass = objMass[m];
+            const vol = objVolume[m];
+            const ox = objX[m], oy = objY[m], oz = objZ[m];
+            const ovx = objVx[m], ovy = objVy[m], ovz = objVz[m];
+            const owx = objWx[m], owy = objWy[m], owz = objWz[m];
+
+            const o = m * 9;
+            const r00 = objRot[o],     r01 = objRot[o + 1], r02 = objRot[o + 2];
+            const r10 = objRot[o + 3], r11 = objRot[o + 4], r12 = objRot[o + 5];
+            const r20 = objRot[o + 6], r21 = objRot[o + 7], r22 = objRot[o + 8];
+
+            let fx = mass * inertialAx;
+            let fy = mass * gravityY;
+            let fz = 0.0;
+            let tx = 0.0, ty = 0.0, tz = 0.0;
+
+            let submergedPts = 0;
+            const subVol = vol / QUAD_COUNT;
+
+            for (let q = 0; q < QUAD_COUNT; q++) {
+              const q3 = q * 3;
+              const lx = QUAD_PTS[q3] * rScale;
+              const ly = QUAD_PTS[q3 + 1] * rScale;
+              const lz = is3D ? (QUAD_PTS[q3 + 2] * rScale) : 0.0;
+
+              const rx = r00 * lx + r10 * ly + r20 * lz;
+              const ry = r01 * lx + r11 * ly + r21 * lz;
+              const rz = is3D ? (r02 * lx + r12 * ly + r22 * lz) : 0.0;
+
+              const wx = ox + rx;
+              const wy = oy + ry;
+              const wz = is3D ? (oz + rz) : 0.0;
+
+              const cix = Math.floor((wx + 16.0) * invCell);
+              const ciy = Math.floor((wy + 16.0) * invCell);
+              const ciz = is3D ? Math.floor((wz + 16.0) * invCell) : 0;
+
+              let rho = 0.0;
+              let fvx = 0.0, fvy = 0.0, fvz = 0.0;
+              let wSum = 0.0;
+              let maxNeighborTopY = -HALF_H - 1.0;
+
+              for (let ozOff = zMinOff; ozOff <= zMaxOff; ozOff++) {
+                for (let oyOff = -1; oyOff <= 1; oyOff++) {
+                  for (let oxOff = -1; oxOff <= 1; oxOff++) {
+                    let j = head[hashCoords(cix + oxOff, ciy + oyOff, ciz + ozOff)];
+                    while (j !== -1) {
+                      const dx = wx - px[j];
+                      const dy = wy - py[j];
+                      const dz = is3D ? (wz - pz[j]) : 0.0;
+                      const dist2 = dx * dx + dy * dy + dz * dz;
+                      if (dist2 < h2) {
+                        const diff = h2 - dist2;
+                        const w = poly6Factor * diff * diff * diff;
+                        rho += w;
+                        fvx += vx[j] * w;
+                        fvy += vy[j] * w;
+                        fvz += vz[j] * w;
+                        wSum += w;
+                        const topCand = py[j] + sim.particleRadius * 1.15;
+                        if (topCand > maxNeighborTopY) maxNeighborTopY = topCand;
+                      }
+                      j = next[j];
+                    }
+                  }
+                }
+              }
+
+              const globalLocalTopY = baseWaterTopY + surfSlopeX * wx;
+              const effectiveSurfaceY = maxNeighborTopY > (-HALF_H - 0.5)
+                ? Math.max(maxNeighborTopY, globalLocalTopY)
+                : globalLocalTopY;
+              const depthBelowSurface = effectiveSurfaceY - wy;
+
+              let subFrac = 0.0;
+              if (depthBelowSurface > -h * 0.25) {
+                const depthFrac = Math.max(0.0, Math.min(1.0, (depthBelowSurface + h * 0.25) / (h * 0.65)));
+                const sphFrac = rho > 0.0 ? Math.min(1.0, (rho + poly6Self * 0.6) * invRestDensity * 1.55) : 0.0;
+                subFrac = Math.max(depthFrac, sphFrac);
+              } else if (rho > 0.0) {
+                subFrac = Math.min(1.0, (rho + poly6Self * 0.5) * invRestDensity * 1.35);
+              }
+
+              if (subFrac > 0.02) {
+                submergedPts++;
+                const invW = wSum > 1e-8 ? (1.0 / wSum) : 0.0;
+                fvx *= invW; fvy *= invW; fvz *= invW;
+
+                const pvx = ovx + (owy * rz - owz * ry);
+                const pvy = ovy + (owz * rx - owx * rz);
+                const pvz = is3D ? (ovz + (owx * ry - owy * rx)) : 0.0;
+
+                const relVx = fvx - pvx;
+                const relVy = fvy - pvy;
+                const relVz = is3D ? (fvz - pvz) : 0.0;
+                const relSpeed = Math.hypot(relVx, relVy, relVz);
+
+                const buoyF = -gravityY * 1.0 * subVol * subFrac;
+                const dragC = (2.6 + 1.35 * relSpeed) * subVol * subFrac;
+
+                const dfx = dragC * relVx;
+                const dfy = buoyF + dragC * relVy;
+                const dfz = is3D ? (dragC * relVz) : 0.0;
+
+                fx += dfx;
+                fy += dfy;
+                fz += dfz;
+
+                tx += ry * dfz - rz * dfy;
+                ty += rz * dfx - rx * dfz;
+                tz += rx * dfy - ry * dfx;
+              }
+            }
+
+            if (shapeCode === SHAPE_DUCK) {
+              const upX = r10, upY = r11, upZ = r12;
+              const rightK = (submergedPts > 0 ? 2.1 : 0.45) * mass;
+              tx += -upZ * rightK;
+              tz += upX * rightK;
+              if (upY < 0.0) {
+                tz += (upX >= 0.0 ? 1.0 : -1.0) * rightK * 0.65;
+              }
+            }
+
+            const invM = objInvMass[m];
+            const linDamp = submergedPts > 0 ? Math.max(0.91, 1.0 - 1.65 * dt) : 0.996;
+            let nvx = (ovx + fx * invM * dt) * linDamp;
+            let nvy = (ovy + fy * invM * dt) * linDamp;
+            let nvz = is3D ? ((ovz + fz * invM * dt) * linDamp) : 0.0;
+
+            let nx = ox + nvx * dt;
+            let ny = oy + nvy * dt;
+            let nz = is3D ? (oz + nvz * dt) : 0.0;
+
+            const bound = objBoundR[m] * 0.94;
+            const minX = -HALF_W + bound;
+            const maxX = HALF_W - bound;
+            const minY = -HALF_H + bound;
+            const maxY = HALF_H - bound;
+            const minZ = -HALF_D_3D + bound;
+            const maxZ = HALF_D_3D - bound;
+
+            if (nx < minX) { nx = minX; if (nvx < 0.0) nvx *= -0.35; }
+            else if (nx > maxX) { nx = maxX; if (nvx > 0.0) nvx *= -0.35; }
+
+            if (ny < minY) {
+              ny = minY;
+              if (nvy < 0.0) nvy *= -0.25;
+              nvx *= 0.95;
+              nvz *= 0.95;
+            } else if (ny > maxY) {
+              ny = maxY;
+              if (nvy > 0.0) nvy *= -0.35;
+            }
+
+            if (is3D) {
+              if (nz < minZ) { nz = minZ; if (nvz < 0.0) nvz *= -0.35; }
+              else if (nz > maxZ) { nz = maxZ; if (nvz > 0.0) nvz *= -0.35; }
+            } else {
+              nz = 0.0;
+              nvz = 0.0;
+            }
+
+            objX[m] = nx; objY[m] = ny; objZ[m] = nz;
+            objVx[m] = nvx; objVy[m] = nvy; objVz[m] = nvz;
+
+            const invI = objInvInertia[m];
+            const angDamp = submergedPts > 0 ? Math.max(0.88, 1.0 - 2.4 * dt) : 0.985;
+            let nwx = is3D ? ((owx + tx * invI * dt) * angDamp) : 0.0;
+            let nwy = is3D ? ((owy + ty * invI * dt) * angDamp) : 0.0;
+            let nwz = (owz + tz * invI * dt) * angDamp;
+
+            const wMag2 = nwx * nwx + nwy * nwy + nwz * nwz;
+            if (wMag2 > 64.0) {
+              const wScale = 8.0 / Math.sqrt(wMag2);
+              nwx *= wScale; nwy *= wScale; nwz *= wScale;
+            }
+            objWx[m] = nwx; objWy[m] = nwy; objWz[m] = nwz;
+
+            const halfDt = 0.5 * dt;
+            const qx = objQx[m], qy = objQy[m], qz = objQz[m], qw = objQw[m];
+            let nqx = qx + halfDt * (nwx * qw + nwy * qz - nwz * qy);
+            let nqy = qy + halfDt * (nwy * qw + nwz * qx - nwx * qz);
+            let nqz = qz + halfDt * (nwz * qw + nwx * qy - nwy * qx);
+            let nqw = qw + halfDt * (-nwx * qx - nwy * qy - nwz * qz);
+
+            const qLen = Math.hypot(nqx, nqy, nqz, nqw);
+            if (qLen > 1e-8) {
+              const invQ = 1.0 / qLen;
+              objQx[m] = nqx * invQ;
+              objQy[m] = nqy * invQ;
+              objQz[m] = nqz * invQ;
+              objQw[m] = nqw * invQ;
+            }
+            updateObjectRotMatrix(m);
+          }
+
+          for (let a = 0; a < MAX_OBJECTS; a++) {
+            if (!objActive[a]) continue;
+            for (let b = a + 1; b < MAX_OBJECTS; b++) {
+              if (!objActive[b]) continue;
+              const dx = objX[b] - objX[a];
+              const dy = objY[b] - objY[a];
+              const dz = is3D ? (objZ[b] - objZ[a]) : 0.0;
+              const minDist = (objBoundR[a] + objBoundR[b]) * 0.90;
+              const dist2 = dx * dx + dy * dy + dz * dz;
+              if (dist2 < minDist * minDist && dist2 > 1e-8) {
+                const dist = Math.sqrt(dist2);
+                const invD = 1.0 / dist;
+                const nx = dx * invD, ny = dy * invD, nz = dz * invD;
+                const overlap = minDist - dist;
+
+                const invMa = objInvMass[a], invMb = objInvMass[b];
+                const invSum = invMa + invMb;
+                if (invSum > 1e-8) {
+                  const corr = overlap / invSum;
+                  objX[a] -= nx * corr * invMa;
+                  objY[a] -= ny * corr * invMa;
+                  if (is3D) objZ[a] -= nz * corr * invMa;
+
+                  objX[b] += nx * corr * invMb;
+                  objY[b] += ny * corr * invMb;
+                  if (is3D) objZ[b] += nz * corr * invMb;
+
+                  const rvx = objVx[b] - objVx[a];
+                  const rvy = objVy[b] - objVy[a];
+                  const rvz = is3D ? (objVz[b] - objVz[a]) : 0.0;
+                  const velAlongN = rvx * nx + rvy * ny + rvz * nz;
+                  if (velAlongN < 0.0) {
+                    const jImp = -(1.32 * velAlongN) / invSum;
+                    objVx[a] -= nx * jImp * invMa;
+                    objVy[a] -= ny * jImp * invMa;
+                    if (is3D) objVz[a] -= nz * jImp * invMa;
+
+                    objVx[b] += nx * jImp * invMb;
+                    objVy[b] += ny * jImp * invMb;
+                    if (is3D) objVz[b] += nz * jImp * invMb;
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // =========================================================================
+        // 2. ADAPTIVE PARTICLE CAPACITY, KERNEL CALIBRATION & VOLUME SPAWNER
+        // =========================================================================
+        function computeMaxCapacity() {
+          const t = sim.detail / 100.0;
+          if (sim.mode === '3D') {
+            const minP = isMobile ? 950 : 1400;
+            const maxP = isMobile ? 2800 : 4100;
+            return Math.round(minP + t * (maxP - minP));
+          } else {
+            const minP = isMobile ? 700 : 1000;
+            const maxP = isMobile ? 1900 : 2800;
+            return Math.round(minP + t * (maxP - minP));
+          }
+        }
+
+        function updateSolverParameters() {
+          const is3D = sim.mode === '3D';
+          sim.halfD = is3D ? HALF_D_3D : HALF_D_2D;
+
+          const cap100 = computeMaxCapacity();
+          const fillFraction = sim.amount / 100.0;
+          sim.targetCount = Math.max(120, Math.min(MAX_PARTICLES, Math.round(cap100 * fillFraction)));
+
+          if (is3D) {
+            const totalTankVol = (HALF_W * 2.0) * (HALF_H * 2.0) * (HALF_D_3D * 2.0);
+            const vTarget = totalTankVol * fillFraction;
+            const h3D = Math.max(0.34, Math.min(0.72, Math.cbrt((vTarget / sim.targetCount) * 4.2)));
+            sim.h = h3D;
+            sim.h2 = h3D * h3D;
+            sim.invCell = 1.0 / h3D;
+            sim.particleRadius = h3D * 0.255;
+
+            sim.poly6Factor = 315.0 / (64.0 * Math.PI * Math.pow(h3D, 9));
+            sim.spikyGradFactor = -45.0 / (Math.PI * Math.pow(h3D, 6));
+            sim.restDensity = 1.05 / (h3D * h3D * h3D * 0.24);
+          } else {
+            const domainMeasure = (HALF_W * 2.0) * (HALF_H * 2.0);
+            const spacing = Math.pow(domainMeasure / Math.max(140, cap100), 0.5);
+            const h2D = Math.max(0.14, Math.min(0.32, spacing * 2.08));
+            sim.h = h2D;
+            sim.h2 = h2D * h2D;
+            sim.invCell = 1.0 / h2D;
+            sim.particleRadius = spacing * 0.44;
+
+            sim.poly6Factor = 4.0 / (Math.PI * Math.pow(h2D, 8));
+            sim.spikyGradFactor = -30.0 / (Math.PI * Math.pow(h2D, 5));
+            sim.restDensity = 2.85 / Math.pow(spacing, 2);
+          }
+
+          const dq = 0.22 * sim.h;
+          const diffQ = sim.h2 - dq * dq;
+          sim.corrDenom = Math.max(1e-6, sim.poly6Factor * diffQ * diffQ * diffQ);
+        }
+
+        function initializeFluidVolume() {
+          updateSolverParameters();
+          const count = sim.targetCount;
+          const is3D = sim.mode === '3D';
+          const fillFraction = sim.amount / 100.0;
+
+          const padX = sim.particleRadius * 0.22;
+          const padY = sim.particleRadius * 0.14;
+          const padZ = is3D ? sim.particleRadius * 0.22 : 0.0;
+
+          const spanX = (HALF_W - padX) * 2.0;
+          const spanY = Math.max(0.38, (HALF_H - padY) * 2.0 * fillFraction);
+          const spanZ = is3D ? (HALF_D_3D - padZ) * 2.0 : 0.0;
+
+          let nx, ny, nz;
+          if (is3D) {
+            const cell = Math.cbrt((spanX * spanY * spanZ) / Math.max(1, count));
+            nx = Math.max(4, Math.round(spanX / cell));
+            nz = Math.max(3, Math.round(spanZ / cell));
+            ny = Math.max(2, Math.ceil(count / (nx * nz)));
+          } else {
+            const cell = Math.sqrt((spanX * spanY) / Math.max(1, count));
+            nx = Math.max(6, Math.round(spanX / cell));
+            ny = Math.max(2, Math.ceil(count / nx));
+            nz = 1;
+          }
+
+          const dx = spanX / nx;
+          const dy = is3D ? (spanY / ny) : Math.min(spanY / ny, dx * 0.96);
+          const dz = is3D ? (spanZ / nz) : 0.0;
+
+          let idx = 0;
+          for (let iy = 0; iy < ny && idx < count; iy++) {
+            for (let iz = 0; iz < nz && idx < count; iz++) {
+              for (let ix = 0; ix < nx && idx < count; ix++) {
+                const jx = ((iy * 7 + iz * 13) % 3 - 1) * 0.08 * dx;
+                const jz = is3D ? (((ix * 11 + iy * 5) % 3 - 1) * 0.08 * dz) : 0.0;
+
+                const x = -HALF_W + padX + (ix + 0.5) * dx + jx;
+                const y = -HALF_H + padY + (iy + 0.5) * dy;
+                const z = is3D ? (-HALF_D_3D + padZ + (iz + 0.5) * dz + jz) : 0.0;
+
+                px[idx] = x;
+                py[idx] = y;
+                pz[idx] = z;
+                oldX[idx] = x;
+                oldY[idx] = y;
+                oldZ[idx] = z;
+                vx[idx] = 0;
+                vy[idx] = 0;
+                vz[idx] = 0;
+                idx++;
+              }
+            }
+          }
+          sim.activeCount = idx;
+          sim.grabbedIdx = -1;
+        }
+
+        function reconcileParticlePopulation(dt) {
+          const target = sim.targetCount;
+          let current = sim.activeCount;
+          if (current === target) return;
+
+          if (current < target) {
+            sim.spawnTimer += dt;
+            const batchMax = Math.min(target - current, Math.max(8, Math.ceil((target - current) * 0.15)));
+            const is3D = sim.mode === '3D';
+            const cols = is3D ? 4 : 5;
+            const spacing = sim.particleRadius * 1.65;
+
+            for (let s = 0; s < batchMax && current < target; s++) {
+              const col = s % cols;
+              const row = Math.floor(s / cols);
+              const sx = (col - (cols - 1) * 0.5) * spacing + Math.sin(sim.spawnTimer * 9.0 + s) * 0.03;
+              const sz = is3D ? (((s * 37) % 5 - 2) * 0.5 * spacing) : 0.0;
+              const sy = HALF_H - sim.particleRadius * 2.2 - row * spacing * 0.85;
+
+              px[current] = sx;
+              py[current] = sy;
+              pz[current] = sz;
+              oldX[current] = sx;
+              oldY[current] = sy + 0.025;
+              oldZ[current] = sz;
+              vx[current] = (Math.random() - 0.5) * 0.24;
+              vy[current] = -1.6;
+              vz[current] = is3D ? (Math.random() - 0.5) * 0.24 : 0.0;
+              current++;
+            }
+            sim.activeCount = current;
+          } else {
+            const removeCount = Math.min(current - target, Math.max(10, Math.ceil((current - target) * 0.18)));
+            for (let r = 0; r < removeCount && current > target; r++) {
+              let lowestIdx = 0;
+              let lowestScore = 1e9;
+              const stride = Math.max(1, Math.floor(current / 64));
+              for (let i = 0; i < current; i += stride) {
+                const score = py[i] + Math.abs(px[i]) * 0.14;
+                if (score < lowestScore) {
+                  lowestScore = score;
+                  lowestIdx = i;
+                }
+              }
+              const last = current - 1;
+              if (sim.grabbedIdx === lowestIdx) sim.grabbedIdx = -1;
+              else if (sim.grabbedIdx === last) sim.grabbedIdx = lowestIdx;
+
+              if (lowestIdx !== last) {
+                px[lowestIdx] = px[last];
+                py[lowestIdx] = py[last];
+                pz[lowestIdx] = pz[last];
+                oldX[lowestIdx] = oldX[last];
+                oldY[lowestIdx] = oldY[last];
+                oldZ[lowestIdx] = oldZ[last];
+                vx[lowestIdx] = vx[last];
+                vy[lowestIdx] = vy[last];
+                vz[lowestIdx] = vz[last];
+              }
+              current--;
+            }
+            sim.activeCount = current;
+          }
+        }
+
+        // =========================================================================
+        // 3. SINGLE-PASS NEIGHBOR CACHE PBF / SPH SOLVER
+        // =========================================================================
+        function hashCoords(ix, iy, iz) {
+          return ((ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791)) & HASH_MASK;
+        }
+
+        function buildSpatialHash(n) {
+          head.fill(-1);
+          const invCell = sim.invCell;
+          const is3D = sim.mode === '3D';
+          for (let i = 0; i < n; i++) {
+            const ix = Math.floor((px[i] + 16.0) * invCell);
+            const iy = Math.floor((py[i] + 16.0) * invCell);
+            const iz = is3D ? Math.floor((pz[i] + 16.0) * invCell) : 0;
+            const h = hashCoords(ix, iy, iz);
+            next[i] = head[h];
+            head[h] = i;
+          }
+        }
+
+        function stepPhysics(dtFrame) {
+          const n = sim.activeCount;
+          if (n <= 0) return;
+
+          const is3D = sim.mode === '3D';
+          const subSteps = 3;
+          const solverIters = 3;
+          const dt = dtFrame / subSteps;
+          const invDt = 1.0 / dt;
+
+          const h = sim.h;
+          const h2 = sim.h2;
+          const invCell = sim.invCell;
+          const invRestDensity = 1.0 / sim.restDensity;
+          const poly6Factor = sim.poly6Factor;
+          const spikyGradFactor = sim.spikyGradFactor;
+          const invCorrDenom = 1.0 / sim.corrDenom;
+          const kCorr = 0.00035;
+          const gravityY = -9.8;
+
+          const zMinOff = is3D ? -1 : 0;
+          const zMaxOff = is3D ? 1 : 0;
+
+          const wallMargin = sim.particleRadius * 0.24;
+          const floorMargin = sim.particleRadius * 0.14;
+          const minX = -HALF_W + wallMargin;
+          const maxX = HALF_W - wallMargin;
+          const minY = -HALF_H + floorMargin;
+          const maxY = HALF_H - wallMargin;
+          const activeHalfD = is3D ? HALF_D_3D : HALF_D_2D;
+          const minZ = -activeHalfD + wallMargin * 0.5;
+          const maxZ = activeHalfD - wallMargin * 0.5;
+
+          sim.smoothWave += (sim.waveIntensity - sim.smoothWave) * Math.min(1.0, dtFrame * 6.0);
+
+          for (let step = 0; step < subSteps; step++) {
+            if (sim.smoothWave > 0.0005) {
+              const freq = 3.4;
+              sim.wavePhase += dt * freq;
+              const amp = sim.smoothWave * 0.85;
+              const sinP = Math.sin(sim.wavePhase);
+              sim.tankX = sinP * amp;
+              sim.tankVx = Math.cos(sim.wavePhase) * amp * freq;
+              sim.tankAx = -amp * freq * freq * sinP;
+            } else {
+              sim.tankX *= 0.92;
+              sim.tankVx *= 0.92;
+              sim.tankAx = 0.0;
+            }
+            const inertialAx = -sim.tankAx;
+
+            if (sim.pointerActive) {
+              if (sim.grabbedIdx < 0 || sim.grabbedIdx >= n) {
+                let bestIdx = -1;
+                let bestD2 = 1.75 * 1.75;
+                for (let i = 0; i < n; i++) {
+                  const dx = sim.pointerX - px[i];
+                  const dy = sim.pointerY - py[i];
+                  const dz = is3D ? (sim.pointerZ - pz[i]) : 0.0;
+                  const d2 = dx * dx + dy * dy + dz * dz;
+                  if (d2 < bestD2) {
+                    bestD2 = d2;
+                    bestIdx = i;
+                  }
+                }
+                sim.grabbedIdx = bestIdx;
+              }
+            } else {
+              sim.grabbedIdx = -1;
+            }
+
+            const mPow = sim.magnetPower;
+            const interactR = 1.05 + mPow * 1.15;
+            const interactR2 = interactR * interactR;
+
+            for (let i = 0; i < n; i++) {
+              oldX[i] = px[i];
+              oldY[i] = py[i];
+              oldZ[i] = pz[i];
+
+              if (sim.pointerActive && i === sim.grabbedIdx) {
+                px[i] = Math.max(minX, Math.min(maxX, sim.pointerX));
+                py[i] = Math.max(minY, Math.min(maxY, sim.pointerY));
+                pz[i] = is3D ? Math.max(minZ, Math.min(maxZ, sim.pointerZ)) : 0.0;
+                vx[i] = sim.pointerVx * 0.65;
+                vy[i] = sim.pointerVy * 0.65;
+                vz[i] = is3D ? sim.pointerVz * 0.65 : 0.0;
+                continue;
+              }
+
+              let vxi = vx[i] + inertialAx * dt;
+              let vyi = vy[i] + gravityY * dt;
+              let vzi = is3D ? vz[i] : 0.0;
+
+              if (sim.pointerActive) {
+                const dx = sim.pointerX - px[i];
+                const dy = sim.pointerY - py[i];
+                const dz = is3D ? (sim.pointerZ - pz[i]) : 0.0;
+                const dist2 = dx * dx + dy * dy + dz * dz;
+
+                if (dist2 < interactR2 && dist2 > 1e-6) {
+                  const dist = Math.sqrt(dist2);
+                  const normDist = dist / interactR;
+                  const falloff = Math.pow(1.0 - normDist, 2.2 - mPow * 0.85);
+                  const invDist = 1.0 / dist;
+                  const rx = dx * invDist;
+                  const ry = dy * invDist;
+                  const rz = dz * invDist;
+
+                  const liftFactor = (0.08 + mPow * 1.15) * Math.min(1.0, falloff * (1.1 + mPow * 0.7));
+                  vyi += -gravityY * liftFactor * dt;
+
+                  const springPull = (10.0 + mPow * 48.0) * falloff;
+                  vxi += rx * springPull * dt;
+                  vyi += ry * springPull * dt;
+                  if (is3D) vzi += rz * springPull * dt;
+
+                  const damp = Math.max(0.74, 1.0 - (2.2 + mPow * 6.8) * falloff * dt);
+                  const followBlend = (0.25 + mPow * 0.55) * falloff;
+                  vxi = sim.pointerVx * followBlend + (vxi - sim.pointerVx * followBlend) * damp;
+                  vyi = sim.pointerVy * followBlend + (vyi - sim.pointerVy * followBlend) * damp;
+                  if (is3D) {
+                    vzi = sim.pointerVz * followBlend + (vzi - sim.pointerVz * followBlend) * damp;
+                  }
+                }
+              }
+
+              const speed2 = vxi * vxi + vyi * vyi + vzi * vzi;
+              if (speed2 > 144.0) {
+                const scale = 12.0 / Math.sqrt(speed2);
+                vxi *= scale;
+                vyi *= scale;
+                vzi *= scale;
+              }
+
+              let nx = px[i] + vxi * dt;
+              let ny = py[i] + vyi * dt;
+              let nz = is3D ? (pz[i] + vzi * dt) : 0.0;
+
+              if (nx < minX) nx = minX; else if (nx > maxX) nx = maxX;
+              if (ny < minY) ny = minY; else if (ny > maxY) ny = maxY;
+              if (is3D) {
+                if (nz < minZ) nz = minZ; else if (nz > maxZ) nz = maxZ;
+              }
+              px[i] = nx;
+              py[i] = ny;
+              pz[i] = nz;
+            }
+
+            projectParticlesOutOfObjects(n, is3D, true);
+            buildSpatialHash(n);
+
+            const poly6Self = poly6Factor * h2 * h2 * h2;
+            for (let i = 0; i < n; i++) {
+              const xi = px[i];
+              const yi = py[i];
+              const zi = pz[i];
+
+              const cix = Math.floor((xi + 16.0) * invCell);
+              const ciy = Math.floor((yi + 16.0) * invCell);
+              const ciz = is3D ? Math.floor((zi + 16.0) * invCell) : 0;
+
+              const base = i * MAX_NEIGHBORS;
+              let count = 0;
+              let rho = poly6Self;
+              let gradIx = 0;
+              let gradIy = 0;
+              let gradIz = 0;
+              let sumGradSq = 0;
+
+              for (let oz = zMinOff; oz <= zMaxOff; oz++) {
+                for (let oy = -1; oy <= 1; oy++) {
+                  for (let ox = -1; ox <= 1; ox++) {
+                    let j = head[hashCoords(cix + ox, ciy + oy, ciz + oz)];
+                    while (j !== -1) {
+                      if (j !== i) {
+                        const rx = xi - px[j];
+                        const ry = yi - py[j];
+                        const rz = is3D ? (zi - pz[j]) : 0.0;
+                        const r2 = rx * rx + ry * ry + rz * rz;
+
+                        if (r2 < h2 && r2 > 1e-10) {
+                          const r = Math.sqrt(r2);
+                          const diff = h2 - r2;
+                          rho += poly6Factor * diff * diff * diff;
+
+                          const hr = h - r;
+                          const gScale = spikyGradFactor * hr * hr * invRestDensity / r;
+                          const gx = gScale * rx;
+                          const gy = gScale * ry;
+                          const gz = gScale * rz;
+
+                          gradIx += gx;
+                          gradIy += gy;
+                          gradIz += gz;
+                          sumGradSq += gx * gx + gy * gy + gz * gz;
+
+                          if (count < MAX_NEIGHBORS) {
+                            nIdx[base + count] = j;
+                            nDist[base + count] = r;
+                            count++;
+                          }
+                        }
+                      }
+                      j = next[j];
+                    }
+                  }
+                }
+              }
+
+              nCount[i] = count;
+              const C = rho * invRestDensity - 1.0;
+              if (C > 0.0) {
+                sumGradSq += gradIx * gradIx + gradIy * gradIy + gradIz * gradIz;
+                lambda[i] = -C / (sumGradSq + 600.0);
+              } else {
+                lambda[i] = 0.0;
+              }
+            }
+
+            for (let iter = 0; iter < solverIters; iter++) {
+              if (iter > 0) {
+                for (let i = 0; i < n; i++) {
+                  const xi = px[i];
+                  const yi = py[i];
+                  const zi = pz[i];
+                  const base = i * MAX_NEIGHBORS;
+                  const count = nCount[i];
+
+                  let rho = poly6Self;
+                  let gradIx = 0;
+                  let gradIy = 0;
+                  let gradIz = 0;
+                  let sumGradSq = 0;
+
+                  for (let k = 0; k < count; k++) {
+                    const j = nIdx[base + k];
+                    const rx = xi - px[j];
+                    const ry = yi - py[j];
+                    const rz = is3D ? (zi - pz[j]) : 0.0;
+                    const r2 = rx * rx + ry * ry + rz * rz;
+
+                    if (r2 < h2 && r2 > 1e-10) {
+                      const r = Math.sqrt(r2);
+                      nDist[base + k] = r;
+                      const diff = h2 - r2;
+                      rho += poly6Factor * diff * diff * diff;
+
+                      const hr = h - r;
+                      const gScale = spikyGradFactor * hr * hr * invRestDensity / r;
+                      const gx = gScale * rx;
+                      const gy = gScale * ry;
+                      const gz = gScale * rz;
+
+                      gradIx += gx;
+                      gradIy += gy;
+                      gradIz += gz;
+                      sumGradSq += gx * gx + gy * gy + gz * gz;
+                    } else {
+                      nDist[base + k] = -1.0;
+                    }
+                  }
+
+                  const C = rho * invRestDensity - 1.0;
+                  if (C > 0.0) {
+                    sumGradSq += gradIx * gradIx + gradIy * gradIy + gradIz * gradIz;
+                    lambda[i] = -C / (sumGradSq + 600.0);
+                  } else {
+                    lambda[i] = 0.0;
+                  }
+                }
+              }
+
+              for (let i = 0; i < n; i++) {
+                const li = lambda[i];
+                const xi = px[i];
+                const yi = py[i];
+                const zi = pz[i];
+                const base = i * MAX_NEIGHBORS;
+                const count = nCount[i];
+
+                let dpx = 0;
+                let dpy = 0;
+                let dpz = 0;
+
+                for (let k = 0; k < count; k++) {
+                  const r = nDist[base + k];
+                  if (r > 0.0) {
+                    const j = nIdx[base + k];
+                    const rx = xi - px[j];
+                    const ry = yi - py[j];
+                    const rz = is3D ? (zi - pz[j]) : 0.0;
+
+                    const hr = h - r;
+                    const diff = h2 - r * r;
+                    const wRatio = (poly6Factor * diff * diff * diff) * invCorrDenom;
+                    const w2 = wRatio * wRatio;
+                    const sCorr = -kCorr * (w2 * w2);
+
+                    const coeff = (li + lambda[j] + sCorr) * spikyGradFactor * hr * hr * invRestDensity / r;
+                    dpx += coeff * rx;
+                    dpy += coeff * ry;
+                    dpz += coeff * rz;
+                  }
+                }
+
+                deltaX[i] = dpx;
+                deltaY[i] = dpy;
+                deltaZ[i] = dpz;
+              }
+
+              for (let i = 0; i < n; i++) {
+                if (sim.pointerActive && i === sim.grabbedIdx) {
+                  px[i] = Math.max(minX, Math.min(maxX, sim.pointerX));
+                  py[i] = Math.max(minY, Math.min(maxY, sim.pointerY));
+                  pz[i] = is3D ? Math.max(minZ, Math.min(maxZ, sim.pointerZ)) : 0.0;
+                  continue;
+                }
+                let nx = px[i] + deltaX[i];
+                let ny = py[i] + deltaY[i];
+                let nz = is3D ? (pz[i] + deltaZ[i]) : 0.0;
+
+                if (nx < minX) nx = minX; else if (nx > maxX) nx = maxX;
+                if (ny < minY) ny = minY; else if (ny > maxY) ny = maxY;
+                if (is3D) {
+                  if (nz < minZ) nz = minZ; else if (nz > maxZ) nz = maxZ;
+                }
+                px[i] = nx;
+                py[i] = ny;
+                pz[i] = nz;
+              }
+
+              projectParticlesOutOfObjects(n, is3D, false);
+            }
+
+            for (let i = 0; i < n; i++) {
+              if (sim.pointerActive && i === sim.grabbedIdx) {
+                vx[i] = sim.pointerVx * 0.65;
+                vy[i] = sim.pointerVy * 0.65;
+                vz[i] = is3D ? sim.pointerVz * 0.65 : 0.0;
+                continue;
+              }
+
+              let vxi = (px[i] - oldX[i]) * invDt * 0.9985;
+              let vyi = (py[i] - oldY[i]) * invDt * 0.9985;
+              let vzi = is3D ? ((pz[i] - oldZ[i]) * invDt * 0.9985) : 0.0;
+
+              if (Math.abs(px[i] - minX) < 0.015 || Math.abs(px[i] - maxX) < 0.015) {
+                vxi *= 0.94;
+                vyi *= 0.985;
+              }
+              if (Math.abs(py[i] - minY) < 0.015) {
+                vxi *= 0.992;
+              }
+
+              vx[i] = vxi;
+              vy[i] = vyi;
+              vz[i] = vzi;
+            }
+
+            const xsphWeight = 0.026;
+            for (let i = 0; i < n; i++) {
+              const vxi = vx[i];
+              const vyi = vy[i];
+              const vzi = vz[i];
+              const base = i * MAX_NEIGHBORS;
+              const count = nCount[i];
+
+              let sumVx = 0;
+              let sumVy = 0;
+              let sumVz = 0;
+
+              for (let k = 0; k < count; k++) {
+                const r = nDist[base + k];
+                if (r > 0.0) {
+                  const j = nIdx[base + k];
+                  const diff = h2 - r * r;
+                  const w = poly6Factor * diff * diff * diff * invRestDensity;
+                  sumVx += (vx[j] - vxi) * w;
+                  sumVy += (vy[j] - vyi) * w;
+                  sumVz += (vz[j] - vzi) * w;
+                }
+              }
+
+              deltaX[i] = vxi + xsphWeight * sumVx;
+              deltaY[i] = vyi + xsphWeight * sumVy;
+              deltaZ[i] = is3D ? (vzi + xsphWeight * sumVz) : 0.0;
+            }
+
+            for (let i = 0; i < n; i++) {
+              vx[i] = deltaX[i];
+              vy[i] = deltaY[i];
+              vz[i] = deltaZ[i];
+            }
+
+            stepRigidObjects(dt, n, is3D);
+          }
+        }
+
+        // =========================================================================
+        // 4. THREE.JS r128 SCENE, PROCEDURAL PMREM STUDIO ENV, TANK & CAUSTICS
+        // =========================================================================
+        const viewportEl = document.getElementById('viewport');
+        const canvasEl = document.getElementById('gl-canvas');
+
+        function getViewportSize() {
+          const w = Math.max(1, Math.floor(viewportEl.clientWidth || window.innerWidth || 300));
+          const h = Math.max(1, Math.floor(viewportEl.clientHeight || window.innerHeight || 300));
+          return { w, h };
+        }
+
+        let renderer;
+        try {
+          renderer = new THREE.WebGLRenderer({
+            canvas: canvasEl,
+            antialias: true,
+            powerPreference: 'high-performance',
+            alpha: true
+          });
+        } catch (e) {
+          document.getElementById('webgl-fallback').classList.remove('hidden');
+          return;
+        }
+
+        const maxDpr = isMobile ? 1.5 : 2.0;
+        const initialDpr = Math.min(window.devicePixelRatio || 1, maxDpr);
+
+        renderer.setPixelRatio(initialDpr);
+        const initSize = getViewportSize();
+        renderer.setSize(initSize.w, initSize.h, false);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.08;
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(42, initSize.w / initSize.h, 0.1, 60.0);
+
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        pmremGenerator.compileEquirectangularShader();
+        let currentEnvRT = null;
+
+        function buildStudioEnvironment(isLight) {
+          const envCanvas = document.createElement('canvas');
+          envCanvas.width = 256;
+          envCanvas.height = 128;
+          const ctx = envCanvas.getContext('2d');
+
+          const skyGrad = ctx.createLinearGradient(0, 0, 0, 128);
+          if (isLight) {
+            skyGrad.addColorStop(0.0, '#ffffff');
+            skyGrad.addColorStop(0.42, '#e0f2fe');
+            skyGrad.addColorStop(0.55, '#bae6fd');
+            skyGrad.addColorStop(1.0, '#7dd3fc');
+          } else {
+            skyGrad.addColorStop(0.0, '#f0f9ff');
+            skyGrad.addColorStop(0.28, '#38bdf8');
+            skyGrad.addColorStop(0.50, '#0c1930');
+            skyGrad.addColorStop(1.0, '#030711');
+          }
+          ctx.fillStyle = skyGrad;
+          ctx.fillRect(0, 0, 256, 128);
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+          ctx.fillRect(32, 8, 74, 20);
+          ctx.fillRect(146, 12, 76, 18);
+
+          ctx.fillStyle = isLight ? 'rgba(255, 255, 255, 0.72)' : 'rgba(125, 211, 252, 0.55)';
+          ctx.fillRect(14, 42, 56, 12);
+          ctx.fillRect(182, 40, 58, 12);
+
+          const tex = new THREE.CanvasTexture(envCanvas);
+          tex.mapping = THREE.EquirectangularReflectionMapping;
+          const newRT = pmremGenerator.fromEquirectangular(tex);
+          tex.dispose();
+
+          if (currentEnvRT) currentEnvRT.dispose();
+          currentEnvRT = newRT;
+          scene.environment = currentEnvRT.texture;
+        }
+        buildStudioEnvironment(false);
+
+        const hemiLight = new THREE.HemisphereLight(0xe0f2fe, 0x0f172a, 0.85);
+        const keyLight = new THREE.DirectionalLight(0xffffff, 1.15);
+        keyLight.position.set(3.6, 5.8, 3.2);
+        const rimLight = new THREE.DirectionalLight(0x7dd3fc, 0.55);
+        rimLight.position.set(-3.4, 2.5, -3.0);
+        scene.add(hemiLight, keyLight, rimLight);
+
+        const orbit = {
+          theta: 0.34,
+          phi: 1.24,
+          radius: 8.6,
+          targetTheta: 0.34,
+          targetPhi: 1.24,
+          targetRadius: 8.6,
+          targetCenter: new THREE.Vector3(0, -0.08, 0)
+        };
+
+        function updateCameraFromOrbit() {
+          const { w, h } = getViewportSize();
+          const aspect = w / h;
+          const portraitBoost = aspect < 1.0 ? Math.min(3.5, (1.0 - aspect) * 5.0) : 0.0;
+
+          orbit.theta += (orbit.targetTheta - orbit.theta) * 0.18;
+          orbit.phi += (orbit.targetPhi - orbit.phi) * 0.18;
+          orbit.radius += (orbit.targetRadius - orbit.radius) * 0.18;
+
+          const effectiveRadius = orbit.radius + portraitBoost;
+          const sinPhi = Math.sin(orbit.phi);
+          camera.position.set(
+            orbit.targetCenter.x + effectiveRadius * sinPhi * Math.sin(orbit.theta),
+            orbit.targetCenter.y + effectiveRadius * Math.cos(orbit.phi),
+            orbit.targetCenter.z + effectiveRadius * sinPhi * Math.cos(orbit.theta)
+          );
+          camera.lookAt(orbit.targetCenter);
+          camera.updateMatrixWorld();
+        }
+        updateCameraFromOrbit();
+
+        let studioGrid = new THREE.GridHelper(18, 24, 0x1e293b, 0x0f172a);
+        studioGrid.position.y = -HALF_H - 0.06;
+        scene.add(studioGrid);
+
+        const tankGroup = new THREE.Group();
+        scene.add(tankGroup);
+
+        const TANK_W = HALF_W * 2.0;
+        const TANK_H = HALF_H * 2.0;
+        const TANK_D = HALF_D_3D * 2.0;
+
+        const causticUniforms = {
+          uTime: { value: 0 },
+          uWaterColor: { value: sim.waterColor.clone() },
+          uFillLevel: { value: 0.62 },
+          uWavePower: { value: 0.0 },
+          uLightMode: { value: 0.0 }
+        };
+
+        const floorCausticMat = new THREE.ShaderMaterial({
+          uniforms: causticUniforms,
+          vertexShader: `
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `,
+          fragmentShader: `
+            uniform float uTime;
+            uniform vec3 uWaterColor;
+            uniform float uFillLevel;
+            uniform float uWavePower;
+            uniform float uLightMode;
+            varying vec2 vUv;
+
+            float caustic(vec2 uv, float t) {
+              vec2 p = uv * 5.2;
+              float a = sin(p.x * 1.4 + t * 1.3 + sin(p.y * 1.6 - t * 1.1));
+              float b = sin(p.y * 1.5 - t * 1.2 + cos(p.x * 1.3 + t * 1.4));
+              float c = sin((p.x + p.y) * 1.1 + t * 0.9);
+              return pow(clamp(1.0 - abs(a + b + c * 0.65) * 0.65, 0.0, 1.0), 3.6);
+            }
+
+            void main() {
+              vec2 uv = vUv + vec2(sin(uTime * 3.4) * uWavePower * 0.14, 0.0);
+              float c = (caustic(uv, uTime) * 0.65 + caustic(uv * 1.32 + vec2(0.37, -0.21), -uTime * 0.85) * 0.55) * (0.45 + uFillLevel * 0.75);
+              vec3 baseSlab = mix(vec3(0.035, 0.06, 0.105), vec3(0.84, 0.90, 0.97), uLightMode);
+              vec3 glow = mix(uWaterColor, vec3(0.88, 0.98, 1.0), mix(0.35, 0.45, uLightMode)) * c * mix(0.62, 0.50, uLightMode);
+              vec2 edge = smoothstep(vec2(0.0), vec2(0.06), vUv) * smoothstep(vec2(0.0), vec2(0.06), 1.0 - vUv);
+              float border = 1.0 - edge.x * edge.y;
+              vec3 col = mix(baseSlab + glow, mix(vec3(0.12, 0.22, 0.36), vec3(0.68, 0.80, 0.94), uLightMode), border * 0.45);
+              gl_FragColor = vec4(col, 0.96);
+            }
+          `,
+          transparent: true
+        });
+
+        const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(TANK_W, TANK_D), floorCausticMat);
+        floorMesh.rotation.x = -Math.PI * 0.5;
+        floorMesh.position.y = -HALF_H;
+        tankGroup.add(floorMesh);
+
+        const sideGlassMat = new THREE.MeshBasicMaterial({
+          color: 0x0f172a,
+          transparent: true,
+          opacity: 0.14,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        });
+
+        const backWall = new THREE.Mesh(new THREE.PlaneGeometry(TANK_W, TANK_H), sideGlassMat);
+        backWall.position.z = -HALF_D_3D;
+        tankGroup.add(backWall);
+
+        const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(TANK_D, TANK_H), sideGlassMat);
+        leftWall.rotation.y = Math.PI * 0.5;
+        leftWall.position.x = -HALF_W;
+        tankGroup.add(leftWall);
+
+        const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(TANK_D, TANK_H), sideGlassMat);
+        rightWall.rotation.y = -Math.PI * 0.5;
+        rightWall.position.x = HALF_W;
+        tankGroup.add(rightWall);
+
+        const boxGeo = new THREE.BoxGeometry(TANK_W, TANK_H, TANK_D);
+        const edgesGeo = new THREE.EdgesGeometry(boxGeo);
+        boxGeo.dispose();
+        const tankEdgesMat = new THREE.LineBasicMaterial({
+          color: 0x38bdf8,
+          transparent: true,
+          opacity: 0.44
+        });
+        const tankEdges = new THREE.LineSegments(edgesGeo, tankEdgesMat);
+        tankGroup.add(tankEdges);
+
+        const cursorRingMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color('#042c62').lerp(new THREE.Color('#38bdf8'), 0.45),
+          transparent: true,
+          opacity: 0.0,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        });
+        const cursorRing = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.21, 32), cursorRingMat);
+        scene.add(cursorRing);
+
+        // =========================================================================
+        // 4B. SCULPTED 3D OBJECT MESH BUILDERS, GHOST PREVIEW & POOL MANAGEMENT
+        // =========================================================================
+        const objectsGroup = new THREE.Group();
+        scene.add(objectsGroup);
+
+        function buildSculptedObjectMesh(shapeCode, hexColor, isGhost) {
+          const group = new THREE.Group();
+          const baseColor = new THREE.Color(hexColor);
+          const makeMat = (col, rough, metal, opacityScale) => new THREE.MeshStandardMaterial({
+            color: col,
+            roughness: rough,
+            metalness: metal,
+            transparent: isGhost,
+            opacity: isGhost ? (0.48 * opacityScale) : 1.0,
+            depthWrite: !isGhost
+          });
+
+          if (shapeCode === SHAPE_SPHERE) {
+            const r = 0.34;
+            const body = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), makeMat(baseColor, 0.24, 0.08, 1.0));
+            group.add(body);
+
+            const stripeColor = baseColor.clone().lerp(new THREE.Color('#ffffff'), 0.72);
+            const band = new THREE.Mesh(
+              new THREE.CylinderGeometry(r * 1.012, r * 1.012, r * 0.34, 24, 1, true),
+              makeMat(stripeColor, 0.28, 0.05, 0.9)
+            );
+            group.add(band);
+
+            const capGeo = new THREE.SphereGeometry(r * 0.32, 16, 10);
+            const capMat = makeMat(baseColor.clone().multiplyScalar(0.72), 0.3, 0.1, 0.9);
+            const topCap = new THREE.Mesh(capGeo, capMat);
+            topCap.position.y = r * 0.86;
+            topCap.scale.y = 0.35;
+            group.add(topCap);
+          } else if (shapeCode === SHAPE_CUBE) {
+            const size = 0.56;
+            const core = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), makeMat(baseColor, 0.28, 0.12, 1.0));
+            group.add(core);
+
+            const trimMat = makeMat(baseColor.clone().multiplyScalar(0.65), 0.35, 0.2, 0.85);
+            const frame1 = new THREE.Mesh(new THREE.BoxGeometry(size * 1.03, size * 0.16, size * 1.03), trimMat);
+            frame1.position.y = size * 0.42;
+            const frame2 = new THREE.Mesh(new THREE.BoxGeometry(size * 1.03, size * 0.16, size * 1.03), trimMat);
+            frame2.position.y = -size * 0.42;
+            const frame3 = new THREE.Mesh(new THREE.BoxGeometry(size * 0.16, size * 1.03, size * 1.03), trimMat);
+            frame3.position.x = size * 0.42;
+            const frame4 = new THREE.Mesh(new THREE.BoxGeometry(size * 0.16, size * 1.03, size * 1.03), trimMat);
+            frame4.position.x = -size * 0.42;
+            group.add(frame1, frame2, frame3, frame4);
+          } else {
+            const bodyMat = makeMat(baseColor, 0.25, 0.05, 1.0);
+            const wingMat = makeMat(baseColor.clone().multiplyScalar(0.88), 0.28, 0.05, 0.95);
+            const beakMat = makeMat(new THREE.Color('#fb923c'), 0.30, 0.04, 1.0);
+            const eyeMat = makeMat(new THREE.Color('#0f172a'), 0.15, 0.1, 1.0);
+
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.28, 22, 16), bodyMat);
+            body.scale.set(1.32, 0.88, 1.0);
+            body.position.set(-0.04, -0.06, 0.0);
+            group.add(body);
+
+            const tail = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.20, 14), bodyMat);
+            tail.position.set(-0.36, 0.06, 0.0);
+            tail.rotation.z = 0.82;
+            group.add(tail);
+
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.185, 20, 16), bodyMat);
+            head.position.set(0.20, 0.21, 0.0);
+            group.add(head);
+
+            const upperBill = new THREE.Mesh(new THREE.SphereGeometry(0.095, 14, 10), beakMat);
+            upperBill.scale.set(1.45, 0.42, 0.95);
+            upperBill.position.set(0.38, 0.19, 0.0);
+            const lowerBill = new THREE.Mesh(new THREE.SphereGeometry(0.08, 14, 10), beakMat);
+            lowerBill.scale.set(1.30, 0.34, 0.82);
+            lowerBill.position.set(0.36, 0.16, 0.0);
+            group.add(upperBill, lowerBill);
+
+            const wingGeo = new THREE.SphereGeometry(0.16, 16, 12);
+            const wingL = new THREE.Mesh(wingGeo, wingMat);
+            wingL.scale.set(1.35, 0.65, 0.32);
+            wingL.position.set(-0.04, -0.03, 0.26);
+            wingL.rotation.z = -0.18;
+
+            const wingR = new THREE.Mesh(wingGeo, wingMat);
+            wingR.scale.set(1.35, 0.65, 0.32);
+            wingR.position.set(-0.04, -0.03, -0.26);
+            wingR.rotation.z = -0.18;
+            group.add(wingL, wingR);
+
+            if (!isGhost) {
+              const eyeGeo = new THREE.SphereGeometry(0.026, 10, 8);
+              const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+              eyeL.position.set(0.30, 0.26, 0.135);
+              const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+              eyeR.position.set(0.30, 0.26, -0.135);
+              group.add(eyeL, eyeR);
+            }
+          }
+
+          return group;
+        }
+
+        let ghostMesh = null;
+        let ghostTargetX = 0.0;
+        let ghostTargetZ = 0.0;
+        let ghostHasHover = false;
+
+        function getShapeCodeFromName(name) {
+          if (name === 'cube') return SHAPE_CUBE;
+          if (name === 'duck') return SHAPE_DUCK;
+          return SHAPE_SPHERE;
+        }
+
+        function rebuildGhostPreview() {
+          if (ghostMesh) {
+            scene.remove(ghostMesh);
+            ghostMesh.traverse((child) => {
+              if (child.isMesh) {
+                child.geometry.dispose();
+                child.material.dispose();
+              }
+            });
+          }
+          const shapeCode = getShapeCodeFromName(objDesigner.shape);
+          ghostMesh = buildSculptedObjectMesh(shapeCode, objDesigner.color, true);
+          const s = objDesigner.size / 100.0;
+          const zScale = sim.mode === '2D' ? Math.min(s, 0.56) : s;
+          ghostMesh.scale.set(s, s, zScale);
+          ghostMesh.visible = false;
+          scene.add(ghostMesh);
+        }
+        rebuildGhostPreview();
+
+        function estimateWaterSurfaceY() {
+          const fillFrac = sim.amount / 100.0;
+          return -HALF_H + (HALF_H * 2.0) * fillFrac;
+        }
+
+        function getActiveObjectCount() {
+          let count = 0;
+          for (let m = 0; m < MAX_OBJECTS; m++) {
+            if (objActive[m]) count++;
+          }
+          return count;
+        }
+
+        function updateObjectCountUI() {
+          const count = getActiveObjectCount();
+          const pillObjCount = document.getElementById('pill-obj-count');
+          const tabObjBadge = document.getElementById('tab-obj-badge');
+          if (pillObjCount) pillObjCount.textContent = count + ' / ' + MAX_OBJECTS + ' Objects';
+          if (tabObjBadge) {
+            tabObjBadge.textContent = String(count);
+            tabObjBadge.classList.toggle('hidden', count === 0);
+          }
+        }
+
+        function spawnDesignedObject(localX, localZ) {
+          let slot = -1;
+          for (let m = 0; m < MAX_OBJECTS; m++) {
+            if (!objActive[m]) {
+              slot = m;
+              break;
+            }
+          }
+          if (slot === -1) {
+            slot = 0;
+            if (objMeshes[slot]) {
+              objectsGroup.remove(objMeshes[slot]);
+              objMeshes[slot].traverse((c) => {
+                if (c.isMesh) { c.geometry.dispose(); c.material.dispose(); }
+              });
+              objMeshes[slot] = null;
+            }
+          }
+
+          const shapeCode = getShapeCodeFromName(objDesigner.shape);
+          const s = objDesigner.size / 100.0;
+          const density = objDesigner.density;
+          const baseR = getShapeBaseRadius(shapeCode);
+          const r = baseR * s;
+
+          const vol = (4.0 / 3.0) * Math.PI * r * r * r * (shapeCode === SHAPE_CUBE ? 1.25 : 1.0);
+          const mass = Math.max(0.04, vol * density);
+          const inertia = Math.max(0.008, 0.42 * mass * r * r);
+
+          const clampX = Math.max(-HALF_W + r + 0.05, Math.min(HALF_W - r - 0.05, localX));
+          const clampZ = sim.mode === '3D'
+            ? Math.max(-HALF_D_3D + r + 0.05, Math.min(HALF_D_3D - r - 0.05, localZ))
+            : 0.0;
+          const dropY = Math.min(HALF_H - r - 0.06, Math.max(estimateWaterSurfaceY() + r + 0.28, 0.35));
+
+          objActive[slot] = 1;
+          objShape[slot] = shapeCode;
+          objScale[slot] = s;
+          objDensity[slot] = density;
+          objVolume[slot] = vol;
+          objMass[slot] = mass;
+          objInvMass[slot] = 1.0 / mass;
+          objInvInertia[slot] = 1.0 / inertia;
+          objBoundR[slot] = r;
+
+          objX[slot] = clampX;
+          objY[slot] = dropY;
+          objZ[slot] = clampZ;
+
+          objVx[slot] = (Math.random() - 0.5) * 0.18;
+          objVy[slot] = -0.85;
+          objVz[slot] = sim.mode === '3D' ? (Math.random() - 0.5) * 0.18 : 0.0;
+
+          const initYaw = sim.mode === '3D' ? (Math.random() - 0.5) * 0.7 : 0.0;
+          objQx[slot] = 0.0;
+          objQy[slot] = Math.sin(initYaw * 0.5);
+          objQz[slot] = 0.0;
+          objQw[slot] = Math.cos(initYaw * 0.5);
+          objWx[slot] = 0.0;
+          objWy[slot] = 0.0;
+          objWz[slot] = 0.0;
+          updateObjectRotMatrix(slot);
+
+          const mesh = buildSculptedObjectMesh(shapeCode, objDesigner.color, false);
+          const zScale = sim.mode === '2D' ? Math.min(s, 0.56) : s;
+          mesh.scale.set(s, s, zScale);
+          mesh.position.set(clampX, dropY, clampZ);
+          mesh.quaternion.set(objQx[slot], objQy[slot], objQz[slot], objQw[slot]);
+          objectsGroup.add(mesh);
+          objMeshes[slot] = mesh;
+
+          updateObjectCountUI();
+        }
+
+        function clearAllObjects() {
+          for (let m = 0; m < MAX_OBJECTS; m++) {
+            objActive[m] = 0;
+            if (objMeshes[m]) {
+              objectsGroup.remove(objMeshes[m]);
+              objMeshes[m].traverse((c) => {
+                if (c.isMesh) { c.geometry.dispose(); c.material.dispose(); }
+              });
+              objMeshes[m] = null;
+            }
+          }
+          updateObjectCountUI();
+        }
+
+        // =========================================================================
+        // 5. INSTANCED SPHERES & DETERMINISTIC 3D SURFACE NETS ISOSURFACE MESHER
+        // =========================================================================
+        const sphereGeo = new THREE.SphereGeometry(1.0, 18, 14);
+        const sphereMat = new THREE.MeshPhysicalMaterial({
+          color: 0x042c62,
+          roughness: 0.05,
+          metalness: 0.02,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.04,
+          reflectivity: 1.0,
+          envMapIntensity: 1.35,
+          transparent: true,
+          opacity: 1.0
+        });
+
+        const sphereMesh = new THREE.InstancedMesh(sphereGeo, sphereMat, MAX_PARTICLES);
+        sphereMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        sphereMesh.frustumCulled = false;
+        scene.add(sphereMesh);
+
+        const MAX_SN_GRID = 38 * 28 * 24;
+        const MAX_SN_VERTS = 45000;
+        const MAX_SN_INDICES = 270000;
+
+        const snDensity = new Float32Array(MAX_SN_GRID);
+        const snSmooth = new Float32Array(MAX_SN_GRID);
+        const snCellVert = new Int32Array(MAX_SN_GRID);
+        const snCellStamp = new Int32Array(MAX_SN_GRID);
+        let snFrameStamp = 1;
+
+        const snPositions = new Float32Array(MAX_SN_VERTS * 3);
+        const snNormals = new Float32Array(MAX_SN_VERTS * 3);
+        const snIndices = new Uint32Array(MAX_SN_INDICES);
+
+        const snLapAccum = new Float32Array(MAX_SN_VERTS * 3);
+        const snLapWeight = new Float32Array(MAX_SN_VERTS);
+
+        const splatWx = new Float32Array(64);
+        const splatWy = new Float32Array(64);
+        const splatWz = new Float32Array(64);
+
+        const SN_EDGE_PAIRS = [
+          [0, 1], [2, 3], [4, 5], [6, 7],
+          [0, 2], [1, 3], [4, 6], [5, 7],
+          [0, 4], [1, 5], [2, 6], [3, 7]
+        ];
+        const SN_CORNER_X = [0, 1, 0, 1, 0, 1, 0, 1];
+        const SN_CORNER_Y = [0, 0, 1, 1, 0, 0, 1, 1];
+        const SN_CORNER_Z = [0, 0, 0, 0, 1, 1, 1, 1];
+
+        const waterGeo = new THREE.BufferGeometry();
+        const posAttr = new THREE.BufferAttribute(snPositions, 3);
+        posAttr.setUsage(THREE.DynamicDrawUsage);
+        const normAttr = new THREE.BufferAttribute(snNormals, 3);
+        normAttr.setUsage(THREE.DynamicDrawUsage);
+        const idxAttr = new THREE.BufferAttribute(snIndices, 1);
+        idxAttr.setUsage(THREE.DynamicDrawUsage);
+
+        waterGeo.setAttribute('position', posAttr);
+        waterGeo.setAttribute('normal', normAttr);
+        waterGeo.setIndex(idxAttr);
+        waterGeo.setDrawRange(0, 0);
+
+        const waterMat = new THREE.MeshPhysicalMaterial({
+          color: 0x042c62,
+          attenuationColor: new THREE.Color(0x042c62).multiplyScalar(0.38),
+          attenuationDistance: 1.65,
+          roughness: 0.035,
+          metalness: 0.02,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.03,
+          reflectivity: 1.0,
+          envMapIntensity: 1.52,
+          transparent: true,
+          opacity: 0.72,
+          depthWrite: false,
+          side: THREE.DoubleSide
+        });
+
+        const waterMesh = new THREE.Mesh(waterGeo, waterMat);
+        waterMesh.frustumCulled = false;
+        waterMesh.renderOrder = 2;
+        scene.add(waterMesh);
+
+        function rebuildSurfaceNetsMesh() {
+          const n = sim.activeCount;
+          if (n <= 0 || sim.fusion <= 0.005) {
+            waterGeo.setDrawRange(0, 0);
+            return;
+          }
+
+          const is3D = sim.mode === '3D';
+          const nx = is3D ? 38 : 52;
+          const ny = is3D ? 28 : 38;
+          const nz = is3D ? 24 : 5;
+          const totalVerts = nx * ny * nz;
+          const sliceStride = nx * ny;
+
+          const wallInset = 0.004;
+          const floorInset = 0.001;
+          const activeHalfD = is3D ? HALF_D_3D : HALF_D_2D;
+          const boxMinX = -HALF_W + wallInset;
+          const boxMaxX = HALF_W - wallInset;
+          const boxMinY = -HALF_H + floorInset;
+          const boxMaxY = HALF_H - wallInset;
+          const boxMinZ = -activeHalfD + wallInset;
+          const boxMaxZ = activeHalfD - wallInset;
+
+          const dx = (boxMaxX - boxMinX) / (nx - 1);
+          const dy = (boxMaxY - boxMinY) / (ny - 1);
+          const dz = (boxMaxZ - boxMinZ) / (nz - 1);
+          const invDx = 1.0 / dx;
+          const invDy = 1.0 / dy;
+          const invDz = 1.0 / dz;
+
+          let rm, isoLevel;
+          if (is3D) {
+            rm = sim.h * 1.18;
+            const fillFraction = sim.amount / 100.0;
+            const vTarget = (HALF_W * 2.0) * (HALF_H * 2.0) * (HALF_D_3D * 2.0) * fillFraction;
+            const pVol = vTarget / Math.max(1, n);
+            const bulkFactor3D = 0.6383 * ((rm * rm * rm) / Math.max(1e-5, pVol));
+            isoLevel = 0.255 * bulkFactor3D;
+          } else {
+            const cap100 = computeMaxCapacity();
+            const domainMeasure = (HALF_W * 2.0) * (HALF_H * 2.0);
+            const spacing = Math.pow(domainMeasure / Math.max(140, cap100), 0.5);
+            rm = Math.max(1.76 * spacing, 0.34);
+            const bulkFactor2D = 0.7854 * Math.pow(rm / spacing, 2);
+            isoLevel = 0.29 * bulkFactor2D;
+          }
+          const rm2 = rm * rm;
+          const invRm2 = 1.0 / rm2;
+
+          snDensity.fill(0.0, 0, totalVerts);
+          snSmooth.fill(0.0, 0, totalVerts);
+
+          let minIx = nx - 2, maxIx = 1;
+          let minIy = ny - 2, maxIy = 1;
+          let minIz = nz - 2, maxIz = 1;
+
+          for (let i = 0; i < n; i++) {
+            const x = px[i], y = py[i], z = pz[i];
+            let ix0 = Math.max(1, Math.floor((x - rm - boxMinX) * invDx));
+            let ix1 = Math.min(nx - 2, Math.ceil((x + rm - boxMinX) * invDx));
+            let iy0 = Math.max(1, Math.floor((y - rm - boxMinY) * invDy));
+            let iy1 = Math.min(ny - 2, Math.ceil((y + rm - boxMinY) * invDy));
+            let iz0 = Math.max(1, Math.floor((z - rm - boxMinZ) * invDz));
+            let iz1 = Math.min(nz - 2, Math.ceil((z + rm - boxMinZ) * invDz));
+            if (ix0 > ix1 || iy0 > iy1 || iz0 > iz1) continue;
+
+            if (ix0 < minIx) minIx = ix0; if (ix1 > maxIx) maxIx = ix1;
+            if (iy0 < minIy) minIy = iy0; if (iy1 > maxIy) maxIy = iy1;
+            if (iz0 < minIz) minIz = iz0; if (iz1 > maxIz) maxIz = iz1;
+
+            for (let ix = ix0; ix <= ix1; ix++) { const d = (boxMinX + ix * dx) - x; splatWx[ix] = d * d; }
+            for (let iy = iy0; iy <= iy1; iy++) { const d = (boxMinY + iy * dy) - y; splatWy[iy] = d * d; }
+            for (let iz = iz0; iz <= iz1; iz++) { const d = (boxMinZ + iz * dz) - z; splatWz[iz] = d * d; }
+
+            for (let iz = iz0; iz <= iz1; iz++) {
+              const rz2 = splatWz[iz];
+              const zOff = iz * sliceStride;
+              for (let iy = iy0; iy <= iy1; iy++) {
+                const rzy2 = rz2 + splatWy[iy];
+                if (rzy2 >= rm2) continue;
+                const rowOff = zOff + iy * nx;
+                for (let ix = ix0; ix <= ix1; ix++) {
+                  const r2 = rzy2 + splatWx[ix];
+                  if (r2 < rm2) {
+                    const t = 1.0 - r2 * invRm2;
+                    snDensity[rowOff + ix] += t * t * t;
+                  }
+                }
+              }
+            }
+          }
+
+          if (minIx > maxIx || minIy > maxIy || minIz > maxIz) {
+            waterGeo.setDrawRange(0, 0);
+            return;
+          }
+
+          const sX0 = Math.max(1, minIx - 1), sX1 = Math.min(nx - 2, maxIx + 1);
+          const sY0 = Math.max(1, minIy - 1), sY1 = Math.min(ny - 2, maxIy + 1);
+          const sZ0 = Math.max(1, minIz - 1), sZ1 = Math.min(nz - 2, maxIz + 1);
+
+          for (let iz = sZ0; iz <= sZ1; iz++) {
+            const zOff = iz * sliceStride;
+            for (let iy = sY0; iy <= sY1; iy++) {
+              const row = zOff + iy * nx;
+              for (let ix = sX0; ix <= sX1; ix++) {
+                const k = row + ix;
+                snSmooth[k] = 0.25 * snDensity[k - 1] + 0.5 * snDensity[k] + 0.25 * snDensity[k + 1];
+              }
+            }
+          }
+          for (let iz = sZ0; iz <= sZ1; iz++) {
+            const zOff = iz * sliceStride;
+            for (let iy = sY0; iy <= sY1; iy++) {
+              const row = zOff + iy * nx;
+              for (let ix = sX0; ix <= sX1; ix++) {
+                const k = row + ix;
+                snDensity[k] = 0.25 * snSmooth[k - nx] + 0.5 * snSmooth[k] + 0.25 * snSmooth[k + nx];
+              }
+            }
+          }
+          for (let iz = sZ0; iz <= sZ1; iz++) {
+            const zOff = iz * sliceStride;
+            for (let iy = sY0; iy <= sY1; iy++) {
+              const row = zOff + iy * nx;
+              for (let ix = sX0; ix <= sX1; ix++) {
+                const k = row + ix;
+                snSmooth[k] = 0.25 * snDensity[k - sliceStride] + 0.5 * snDensity[k] + 0.25 * snDensity[k + sliceStride];
+              }
+            }
+          }
+
+          const cX0 = Math.max(0, sX0 - 1), cX1 = Math.min(nx - 2, sX1);
+          const cY0 = Math.max(0, sY0 - 1), cY1 = Math.min(ny - 2, sY1);
+          const cZ0 = Math.max(0, sZ0 - 1), cZ1 = Math.min(nz - 2, sZ1);
+
+          const stamp = ++snFrameStamp;
+          let vertCount = 0;
+
+          for (let cz = cZ0; cz <= cZ1; cz++) {
+            const zBase0 = cz * sliceStride;
+            const zBase1 = zBase0 + sliceStride;
+            for (let cy = cY0; cy <= cY1; cy++) {
+              const row00 = zBase0 + cy * nx;
+              const row10 = zBase0 + (cy + 1) * nx;
+              const row01 = zBase1 + cy * nx;
+              const row11 = zBase1 + (cy + 1) * nx;
+              for (let cx = cX0; cx <= cX1; cx++) {
+                const k0 = row00 + cx;
+                const v0 = snSmooth[k0];
+                const v1 = snSmooth[k0 + 1];
+                const v2 = snSmooth[row10 + cx];
+                const v3 = snSmooth[row10 + cx + 1];
+                const v4 = snSmooth[row01 + cx];
+                const v5 = snSmooth[row01 + cx + 1];
+                const v6 = snSmooth[row11 + cx];
+                const v7 = snSmooth[row11 + cx + 1];
+
+                const mask =
+                  (v0 > isoLevel ? 1 : 0) |
+                  (v1 > isoLevel ? 2 : 0) |
+                  (v2 > isoLevel ? 4 : 0) |
+                  (v3 > isoLevel ? 8 : 0) |
+                  (v4 > isoLevel ? 16 : 0) |
+                  (v5 > isoLevel ? 32 : 0) |
+                  (v6 > isoLevel ? 64 : 0) |
+                  (v7 > isoLevel ? 128 : 0);
+
+                if (mask === 0 || mask === 255 || vertCount >= MAX_SN_VERTS) continue;
+
+                let sumX = 0.0, sumY = 0.0, sumZ = 0.0, crossings = 0;
+                const i0 = (mask & 1) !== 0, i1 = (mask & 2) !== 0, i2 = (mask & 4) !== 0, i3 = (mask & 8) !== 0;
+                const i4 = (mask & 16) !== 0, i5 = (mask & 32) !== 0, i6 = (mask & 64) !== 0, i7 = (mask & 128) !== 0;
+
+                if (i0 !== i1) { sumX += (isoLevel - v0) / (v1 - v0); crossings++; }
+                if (i2 !== i3) { sumX += (isoLevel - v2) / (v3 - v2); sumY += 1.0; crossings++; }
+                if (i4 !== i5) { sumX += (isoLevel - v4) / (v5 - v4); sumZ += 1.0; crossings++; }
+                if (i6 !== i7) { sumX += (isoLevel - v6) / (v7 - v6); sumY += 1.0; sumZ += 1.0; crossings++; }
+
+                if (i0 !== i2) { sumY += (isoLevel - v0) / (v2 - v0); crossings++; }
+                if (i1 !== i3) { sumY += (isoLevel - v1) / (v3 - v1); sumX += 1.0; crossings++; }
+                if (i4 !== i6) { sumY += (isoLevel - v4) / (v6 - v4); sumZ += 1.0; crossings++; }
+                if (i5 !== i7) { sumY += (isoLevel - v5) / (v7 - v5); sumX += 1.0; sumZ += 1.0; crossings++; }
+
+                if (i0 !== i4) { sumZ += (isoLevel - v0) / (v4 - v0); crossings++; }
+                if (i1 !== i5) { sumZ += (isoLevel - v1) / (v5 - v1); sumX += 1.0; crossings++; }
+                if (i2 !== i6) { sumZ += (isoLevel - v2) / (v6 - v2); sumY += 1.0; crossings++; }
+                if (i3 !== i7) { sumZ += (isoLevel - v3) / (v7 - v3); sumX += 1.0; sumY += 1.0; crossings++; }
+
+                const invC = 1.0 / crossings;
+                let wx = boxMinX + (cx + sumX * invC) * dx;
+                let wy = boxMinY + (cy + sumY * invC) * dy;
+                let wz = boxMinZ + (cz + sumZ * invC) * dz;
+
+                if (wx < boxMinX) wx = boxMinX; else if (wx > boxMaxX) wx = boxMaxX;
+                if (wy < boxMinY) wy = boxMinY; else if (wy > boxMaxY) wy = boxMaxY;
+                if (wz < boxMinZ) wz = boxMinZ; else if (wz > boxMaxZ) wz = boxMaxZ;
+
+                const vIdx = vertCount++;
+                const o = vIdx * 3;
+                snPositions[o] = wx;
+                snPositions[o + 1] = wy;
+                snPositions[o + 2] = wz;
+                snCellVert[k0] = vIdx;
+                snCellStamp[k0] = stamp;
+              }
+            }
+          }
+
+          if (vertCount === 0) {
+            waterGeo.setDrawRange(0, 0);
+            return;
+          }
+
+          let indexCount = 0;
+          function emitQuad(c0, c1, c2, c3, flip) {
+            if (snCellStamp[c0] !== stamp || snCellStamp[c1] !== stamp || snCellStamp[c2] !== stamp || snCellStamp[c3] !== stamp) return;
+            if (indexCount + 6 > MAX_SN_INDICES) return;
+            const v0 = snCellVert[c0], v1 = snCellVert[c1], v2 = snCellVert[c2], v3 = snCellVert[c3];
+            if (!flip) {
+              snIndices[indexCount++] = v0; snIndices[indexCount++] = v1; snIndices[indexCount++] = v2;
+              snIndices[indexCount++] = v0; snIndices[indexCount++] = v2; snIndices[indexCount++] = v3;
+            } else {
+              snIndices[indexCount++] = v0; snIndices[indexCount++] = v2; snIndices[indexCount++] = v1;
+              snIndices[indexCount++] = v0; snIndices[indexCount++] = v3; snIndices[indexCount++] = v2;
+            }
+          }
+
+          for (let cz = Math.max(1, cZ0); cz <= cZ1; cz++) {
+            const zOff = cz * sliceStride;
+            for (let cy = Math.max(1, cY0); cy <= cY1; cy++) {
+              const row = zOff + cy * nx;
+              for (let cx = Math.max(1, cX0); cx <= cX1; cx++) {
+                const k = row + cx;
+                if (snCellStamp[k] !== stamp) continue;
+
+                const inBase = snSmooth[k] > isoLevel;
+
+                const inX = snSmooth[k + 1] > isoLevel;
+                if (inBase !== inX) {
+                  emitQuad(k - nx - sliceStride, k - sliceStride, k, k - nx, !inBase);
+                }
+
+                const inY = snSmooth[k + nx] > isoLevel;
+                if (inBase !== inY) {
+                  emitQuad(k - 1 - sliceStride, k - 1, k, k - sliceStride, !inBase);
+                }
+
+                const inZ = snSmooth[k + sliceStride] > isoLevel;
+                if (inBase !== inZ) {
+                  emitQuad(k - 1 - nx, k - nx, k, k - 1, !inBase);
+                }
+              }
+            }
+          }
+
+          if (indexCount === 0) {
+            waterGeo.setDrawRange(0, 0);
+            return;
+          }
+
+          const smoothLambda = 0.45;
+          for (let pass = 0; pass < 2; pass++) {
+            snLapAccum.fill(0.0, 0, vertCount * 3);
+            snLapWeight.fill(0.0, 0, vertCount);
+
+            for (let t = 0; t < indexCount; t += 3) {
+              const a = snIndices[t], b = snIndices[t + 1], c = snIndices[t + 2];
+              const a3 = a * 3, b3 = b * 3, c3 = c * 3;
+              const ax = snPositions[a3], ay = snPositions[a3 + 1], az = snPositions[a3 + 2];
+              const bx = snPositions[b3], by = snPositions[b3 + 1], bz = snPositions[b3 + 2];
+              const cx = snPositions[c3], cy = snPositions[c3 + 1], cz = snPositions[c3 + 2];
+
+              snLapAccum[a3] += bx + cx; snLapAccum[a3 + 1] += by + cy; snLapAccum[a3 + 2] += bz + cz; snLapWeight[a] += 2.0;
+              snLapAccum[b3] += ax + cx; snLapAccum[b3 + 1] += ay + cy; snLapAccum[b3 + 2] += az + cz; snLapWeight[b] += 2.0;
+              snLapAccum[c3] += ax + bx; snLapAccum[c3 + 1] += ay + by; snLapAccum[c3 + 2] += az + bz; snLapWeight[c] += 2.0;
+            }
+
+            for (let v = 0; v < vertCount; v++) {
+              const w = snLapWeight[v];
+              if (w > 0.0) {
+                const invW = 1.0 / w;
+                const v3 = v * 3;
+                let nxP = snPositions[v3] + smoothLambda * (snLapAccum[v3] * invW - snPositions[v3]);
+                let nyP = snPositions[v3 + 1] + smoothLambda * (snLapAccum[v3 + 1] * invW - snPositions[v3 + 1]);
+                let nzP = snPositions[v3 + 2] + smoothLambda * (snLapAccum[v3 + 2] * invW - snPositions[v3 + 2]);
+
+                if (nxP < boxMinX) nxP = boxMinX; else if (nxP > boxMaxX) nxP = boxMaxX;
+                if (nyP < boxMinY) nyP = boxMinY; else if (nyP > boxMaxY) nyP = boxMaxY;
+                if (nzP < boxMinZ) nzP = boxMinZ; else if (nzP > boxMaxZ) nzP = boxMaxZ;
+
+                snPositions[v3] = nxP;
+                snPositions[v3 + 1] = nyP;
+                snPositions[v3 + 2] = nzP;
+              }
+            }
+          }
+
+          snNormals.fill(0.0, 0, vertCount * 3);
+          for (let t = 0; t < indexCount; t += 3) {
+            const a = snIndices[t], b = snIndices[t + 1], c = snIndices[t + 2];
+            const a3 = a * 3, b3 = b * 3, c3 = c * 3;
+            const ax = snPositions[a3], ay = snPositions[a3 + 1], az = snPositions[a3 + 2];
+            const e1x = snPositions[b3] - ax, e1y = snPositions[b3 + 1] - ay, e1z = snPositions[b3 + 2] - az;
+            const e2x = snPositions[c3] - ax, e2y = snPositions[c3 + 1] - ay, e2z = snPositions[c3 + 2] - az;
+
+            const fnx = e1y * e2z - e1z * e2y;
+            const fny = e1z * e2x - e1x * e2z;
+            const fnz = e1x * e2y - e1y * e2x;
+
+            snNormals[a3] += fnx; snNormals[a3 + 1] += fny; snNormals[a3 + 2] += fnz;
+            snNormals[b3] += fnx; snNormals[b3 + 1] += fny; snNormals[b3 + 2] += fnz;
+            snNormals[c3] += fnx; snNormals[c3 + 1] += fny; snNormals[c3 + 2] += fnz;
+          }
+
+          for (let v = 0; v < vertCount; v++) {
+            const v3 = v * 3;
+            const nxN = snNormals[v3], nyN = snNormals[v3 + 1], nzN = snNormals[v3 + 2];
+            const len = Math.hypot(nxN, nyN, nzN);
+            if (len > 1e-8) {
+              const invL = 1.0 / len;
+              snNormals[v3] = nxN * invL;
+              snNormals[v3 + 1] = nyN * invL;
+              snNormals[v3 + 2] = nzN * invL;
+            } else {
+              snNormals[v3] = 0.0;
+              snNormals[v3 + 1] = 1.0;
+              snNormals[v3 + 2] = 0.0;
+            }
+          }
+
+          posAttr.needsUpdate = true;
+          normAttr.needsUpdate = true;
+          idxAttr.needsUpdate = true;
+          waterGeo.setDrawRange(0, indexCount);
+          waterGeo.computeBoundingSphere();
+        }
+
+        // =========================================================================
+        // 6. CANVAS-ISOLATED POINTER & MULTI-TOUCH INTERACTION
+        // =========================================================================
+        const raycaster = new THREE.Raycaster();
+        const ndcPointer = new THREE.Vector2();
+        const grabPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+        const planeHit = new THREE.Vector3();
+        const camForward = new THREE.Vector3();
+
+        const gestureHint = document.getElementById('gesture-hint');
+        let hintDismissed = false;
+        function dismissGestureHint() {
+          if (!hintDismissed) {
+            hintDismissed = true;
+            gestureHint.classList.add('hint-faded');
+          }
+        }
+        setTimeout(dismissGestureHint, 4800);
+
+        function tryProjectPointerToTank(clientX, clientY, isStart) {
+          const rect = canvasEl.getBoundingClientRect();
+          const rw = Math.max(1, rect.width);
+          const rh = Math.max(1, rect.height);
+          ndcPointer.x = ((clientX - rect.left) / rw) * 2 - 1;
+          ndcPointer.y = -((clientY - rect.top) / rh) * 2 + 1;
+
+          raycaster.setFromCamera(ndcPointer, camera);
+
+          if (sim.mode === '2D') {
+            grabPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 0, 1), new THREE.Vector3(sim.tankX, 0, 0));
+          } else {
+            camera.getWorldDirection(camForward);
+            let anchorZ = 0;
+            if (!isStart && sim.grabbedIdx >= 0 && sim.grabbedIdx < sim.activeCount) {
+              anchorZ = pz[sim.grabbedIdx];
+            }
+            grabPlane.setFromNormalAndCoplanarPoint(camForward.negate(), new THREE.Vector3(sim.tankX, -0.2, anchorZ));
+          }
+
+          if (!raycaster.ray.intersectPlane(grabPlane, planeHit)) return false;
+
+          const rawLocalX = planeHit.x - sim.tankX;
+          const rawLocalY = planeHit.y;
+          const rawLocalZ = sim.mode === '3D' ? planeHit.z : 0;
+
+          if (isStart) {
+            const margin = 0.75;
+            if (Math.abs(rawLocalX) > HALF_W + margin || Math.abs(rawLocalY) > HALF_H + margin) {
+              return false;
+            }
+          }
+
+          const localX = Math.max(-HALF_W, Math.min(HALF_W, rawLocalX));
+          const localY = Math.max(-HALF_H, Math.min(HALF_H, rawLocalY));
+          const localZ = sim.mode === '3D' ? Math.max(-HALF_D_3D, Math.min(HALF_D_3D, rawLocalZ)) : 0;
+
+          if (isStart) {
+            sim.prevPointerX = localX;
+            sim.prevPointerY = localY;
+            sim.prevPointerZ = localZ;
+            sim.pointerVx = 0;
+            sim.pointerVy = 0;
+            sim.pointerVz = 0;
+          } else {
+            sim.prevPointerX = sim.pointerX;
+            sim.prevPointerY = sim.pointerY;
+            sim.prevPointerZ = sim.pointerZ;
+          }
+
+          sim.pointerX = localX;
+          sim.pointerY = localY;
+          sim.pointerZ = localZ;
+          cursorRing.position.set(localX + sim.tankX, localY, localZ);
+          return true;
+        }
+
+        const waterSurfacePlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        function tryProjectPlacementTarget(clientX, clientY) {
+          const rect = canvasEl.getBoundingClientRect();
+          const rw = Math.max(1, rect.width);
+          const rh = Math.max(1, rect.height);
+          ndcPointer.x = ((clientX - rect.left) / rw) * 2 - 1;
+          ndcPointer.y = -((clientY - rect.top) / rh) * 2 + 1;
+
+          raycaster.setFromCamera(ndcPointer, camera);
+
+          if (sim.mode === '2D') {
+            waterSurfacePlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 0, 1), new THREE.Vector3(sim.tankX, 0, 0));
+            if (!raycaster.ray.intersectPlane(waterSurfacePlane, planeHit)) return false;
+            const rawX = planeHit.x - sim.tankX;
+            const rawY = planeHit.y;
+            if (Math.abs(rawX) > HALF_W + 0.5 || Math.abs(rawY) > HALF_H + 0.5) return false;
+            ghostTargetX = Math.max(-HALF_W + 0.25, Math.min(HALF_W - 0.25, rawX));
+            ghostTargetZ = 0.0;
+            return true;
+          } else {
+            const surfY = estimateWaterSurfaceY();
+            waterSurfacePlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), new THREE.Vector3(sim.tankX, surfY, 0));
+            if (!raycaster.ray.intersectPlane(waterSurfacePlane, planeHit)) return false;
+            const rawX = planeHit.x - sim.tankX;
+            const rawZ = planeHit.z;
+            if (Math.abs(rawX) > HALF_W + 0.65 || Math.abs(rawZ) > HALF_D_3D + 0.65) return false;
+            ghostTargetX = Math.max(-HALF_W + 0.25, Math.min(HALF_W - 0.25, rawX));
+            ghostTargetZ = Math.max(-HALF_D_3D + 0.25, Math.min(HALF_D_3D - 0.25, rawZ));
+            return true;
+          }
+        }
+
+        function isObjectPlacementMode() {
+          return sim.activeTab === 'objects' && sim.objectInteractMode === 'place';
+        }
+
+        let mouseMode = 'none';
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        canvasEl.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        canvasEl.addEventListener('mousedown', (e) => {
+          dismissGestureHint();
+          lastMouseX = e.clientX;
+          lastMouseY = e.clientY;
+          if (e.button === 0) {
+            if (isObjectPlacementMode()) {
+              if (tryProjectPlacementTarget(e.clientX, e.clientY)) {
+                ghostHasHover = true;
+                spawnDesignedObject(ghostTargetX, ghostTargetZ);
+              } else {
+                mouseMode = 'orbit';
+              }
+            } else if (tryProjectPointerToTank(e.clientX, e.clientY, true)) {
+              mouseMode = 'grab';
+              sim.pointerActive = true;
+              sim.grabbedIdx = -1;
+            } else {
+              mouseMode = 'orbit';
+            }
+          } else if (e.button === 2 || e.button === 1) {
+            mouseMode = 'orbit';
+          }
+        });
+
+        canvasEl.addEventListener('mousemove', (e) => {
+          if (mouseMode === 'grab' && sim.pointerActive) {
+            tryProjectPointerToTank(e.clientX, e.clientY, false);
+          } else if (mouseMode === 'orbit') {
+            const dx = e.clientX - lastMouseX;
+            const dy = e.clientY - lastMouseY;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+            orbit.targetTheta -= dx * 0.0065;
+            orbit.targetPhi = Math.max(0.22, Math.min(Math.PI - 0.22, orbit.targetPhi - dy * 0.0065));
+          } else if (isObjectPlacementMode()) {
+            ghostHasHover = tryProjectPlacementTarget(e.clientX, e.clientY);
+          }
+        });
+
+        window.addEventListener('mouseup', () => {
+          mouseMode = 'none';
+          sim.pointerActive = false;
+          sim.grabbedIdx = -1;
+        });
+
+        canvasEl.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          dismissGestureHint();
+          orbit.targetRadius = Math.max(4.0, Math.min(14.5, orbit.targetRadius + e.deltaY * 0.0045));
+        }, { passive: false });
+
+        let touchMode = 'none';
+        let lastTouchX = 0;
+        let lastTouchY = 0;
+        let lastPinchDist = 0;
+
+        canvasEl.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          dismissGestureHint();
+          if (e.touches.length === 1) {
+            const t = e.touches[0];
+            lastTouchX = t.clientX;
+            lastTouchY = t.clientY;
+            if (isObjectPlacementMode()) {
+              if (tryProjectPlacementTarget(t.clientX, t.clientY)) {
+                touchMode = 'place';
+                ghostHasHover = true;
+              } else {
+                touchMode = 'orbit';
+                ghostHasHover = false;
+              }
+            } else if (tryProjectPointerToTank(t.clientX, t.clientY, true)) {
+              touchMode = 'grab';
+              sim.pointerActive = true;
+              sim.grabbedIdx = -1;
+            } else {
+              touchMode = 'orbit';
+              sim.pointerActive = false;
+            }
+          } else if (e.touches.length >= 2) {
+            touchMode = 'orbit';
+            sim.pointerActive = false;
+            sim.grabbedIdx = -1;
+            ghostHasHover = false;
+            const t0 = e.touches[0];
+            const t1 = e.touches[1];
+            lastTouchX = (t0.clientX + t1.clientX) * 0.5;
+            lastTouchY = (t0.clientY + t1.clientY) * 0.5;
+            lastPinchDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+          }
+        }, { passive: false });
+
+        canvasEl.addEventListener('touchmove', (e) => {
+          e.preventDefault();
+          if (e.touches.length === 1) {
+            const t = e.touches[0];
+            if (touchMode === 'place') {
+              ghostHasHover = tryProjectPlacementTarget(t.clientX, t.clientY);
+            } else if (touchMode === 'grab') {
+              tryProjectPointerToTank(t.clientX, t.clientY, false);
+            } else if (touchMode === 'orbit') {
+              const dx = t.clientX - lastTouchX;
+              const dy = t.clientY - lastTouchY;
+              lastTouchX = t.clientX;
+              lastTouchY = t.clientY;
+              orbit.targetTheta -= dx * 0.0075;
+              orbit.targetPhi = Math.max(0.22, Math.min(Math.PI - 0.22, orbit.targetPhi - dy * 0.0075));
+            }
+          } else if (e.touches.length >= 2) {
+            const t0 = e.touches[0];
+            const t1 = e.touches[1];
+            const cx = (t0.clientX + t1.clientX) * 0.5;
+            const cy = (t0.clientY + t1.clientY) * 0.5;
+            const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+
+            if (touchMode === 'orbit' && lastPinchDist > 0) {
+              const dx = cx - lastTouchX;
+              const dy = cy - lastTouchY;
+              orbit.targetTheta -= dx * 0.0075;
+              orbit.targetPhi = Math.max(0.22, Math.min(Math.PI - 0.22, orbit.targetPhi - dy * 0.0075));
+              orbit.targetRadius = Math.max(4.0, Math.min(14.5, orbit.targetRadius + (lastPinchDist - dist) * 0.015));
+            }
+
+            touchMode = 'orbit';
+            lastTouchX = cx;
+            lastTouchY = cy;
+            lastPinchDist = dist;
+          }
+        }, { passive: false });
+
+        canvasEl.addEventListener('touchend', (e) => {
+          if (e.touches.length === 0) {
+            if (touchMode === 'place' && ghostHasHover) {
+              spawnDesignedObject(ghostTargetX, ghostTargetZ);
+            }
+            touchMode = 'none';
+            sim.pointerActive = false;
+            sim.grabbedIdx = -1;
+            ghostHasHover = false;
+          } else if (e.touches.length === 1) {
+            const t = e.touches[0];
+            lastTouchX = t.clientX;
+            lastTouchY = t.clientY;
+            if (!isObjectPlacementMode() && tryProjectPointerToTank(t.clientX, t.clientY, true)) {
+              touchMode = 'grab';
+              sim.pointerActive = true;
+              sim.grabbedIdx = -1;
+            } else {
+              touchMode = 'orbit';
+              sim.pointerActive = false;
+            }
+          }
+        }, { passive: false });
+
+        // =========================================================================
+        // 7. SAFE RESIZE VIEWPORT & RESIZEOBSERVER HANDLER
+        // =========================================================================
+        function resizeViewport() {
+          const { w, h } = getViewportSize();
+          const curDpr = Math.min(window.devicePixelRatio || 1, maxDpr);
+
+          camera.aspect = w / h;
+          camera.updateProjectionMatrix();
+
+          renderer.setPixelRatio(curDpr);
+          renderer.setSize(w, h, false);
+        }
+
+        window.addEventListener('resize', resizeViewport);
+        window.addEventListener('orientationchange', resizeViewport);
+        if (typeof ResizeObserver !== 'undefined') {
+          const ro = new ResizeObserver(() => resizeViewport());
+          ro.observe(viewportEl);
+        }
+
+        // =========================================================================
+        // 8. DARK/LIGHT MODE, COLLAPSIBLE PANEL & UI CONTROLS
+        // =========================================================================
+        const controlPanel = document.getElementById('control-panel');
+        const btnTheme = document.getElementById('btn-theme');
+        const iconSun = document.getElementById('icon-sun');
+        const iconMoon = document.getElementById('icon-moon');
+        const btnDesktopToggle = document.getElementById('btn-desktop-panel-toggle');
+        const iconSliders = document.getElementById('icon-sliders');
+        const iconClose = document.getElementById('icon-close');
+
+        const btnMobileToggle = document.getElementById('btn-mobile-panel-toggle');
+        const mobileToggleLabel = document.getElementById('mobile-toggle-label');
+        const mobileChevron = document.getElementById('mobile-chevron');
+        const btnQuickMode = document.getElementById('btn-quick-mode');
+        const quickModeLabel = document.getElementById('quick-mode-label');
+        const btnQuickSplash = document.getElementById('btn-quick-splash');
+
+        function applyTheme(themeName) {
+          sim.theme = themeName;
+          const isLight = themeName === 'light';
+          document.documentElement.classList.toggle('light-theme', isLight);
+
+          iconSun.classList.toggle('hidden', isLight);
+          iconMoon.classList.toggle('hidden', !isLight);
+
+          causticUniforms.uLightMode.value = isLight ? 1.0 : 0.0;
+          buildStudioEnvironment(isLight);
+
+          hemiLight.intensity = isLight ? 1.15 : 0.85;
+          hemiLight.groundColor.setHex(isLight ? 0xcbd5e1 : 0x0f172a);
+          keyLight.intensity = isLight ? 1.30 : 1.15;
+
+          scene.remove(studioGrid);
+          studioGrid.geometry.dispose();
+          studioGrid.material.dispose();
+          studioGrid = isLight
+            ? new THREE.GridHelper(18, 24, 0x94a3b8, 0xcbd5e1)
+            : new THREE.GridHelper(18, 24, 0x1e293b, 0x0f172a);
+          studioGrid.position.y = -HALF_H - 0.06;
+          scene.add(studioGrid);
+
+          sideGlassMat.color.setHex(isLight ? 0x64748b : 0x0f172a);
+          sideGlassMat.opacity = isLight ? 0.10 : 0.14;
+          tankEdgesMat.color.setHex(isLight ? 0x0284c7 : 0x38bdf8);
+          tankEdgesMat.opacity = isLight ? 0.56 : 0.44;
+
+          applyWaterColor(sim.waterHex);
+        }
+
+        btnTheme.addEventListener('click', () => {
+          applyTheme(sim.theme === 'dark' ? 'light' : 'dark');
+        });
+
+        // Default collapsed on mobile (<768px) for 90%+ viewport; expanded on desktop
+        let panelCollapsed = window.innerWidth < 768;
+
+        function syncPanelCollapsedState() {
+          controlPanel.classList.toggle('collapsed', panelCollapsed);
+
+          // Desktop button icons
+          iconSliders.classList.toggle('hidden', !panelCollapsed);
+          iconClose.classList.toggle('hidden', panelCollapsed);
+
+          // Mobile quick-bar label & chevron
+          mobileToggleLabel.textContent = panelCollapsed ? 'Controls' : 'Hide';
+          mobileChevron.style.transform = panelCollapsed ? 'rotate(0deg)' : 'rotate(180deg)';
+
+          resizeViewport();
+          setTimeout(resizeViewport, 300);
+        }
+        syncPanelCollapsedState();
+
+        btnDesktopToggle.addEventListener('click', () => {
+          panelCollapsed = !panelCollapsed;
+          syncPanelCollapsedState();
+        });
+
+        btnMobileToggle.addEventListener('click', () => {
+          panelCollapsed = !panelCollapsed;
+          syncPanelCollapsedState();
+        });
+
+        // Mobile 20%-width touch scrollbar synchronized with #panel-scroll-body
+        const panelScrollBody = document.getElementById('panel-scroll-body');
+        const mobileScrollTrack = document.getElementById('mobile-scroll-track');
+        const mobileScrollThumb = document.getElementById('mobile-scroll-thumb');
+
+        function syncMobileScrollThumb() {
+          if (!panelScrollBody || !mobileScrollTrack || !mobileScrollThumb) return;
+          const trackH = mobileScrollTrack.clientHeight;
+          const scrollH = panelScrollBody.scrollHeight;
+          const clientH = panelScrollBody.clientHeight;
+          if (trackH <= 0 || clientH <= 0) return;
+
+          const maxScroll = Math.max(0, scrollH - clientH);
+          if (maxScroll <= 1) {
+            mobileScrollThumb.style.height = Math.max(24, trackH - 6) + 'px';
+            mobileScrollThumb.style.top = '3px';
+            return;
+          }
+
+          const ratio = clientH / scrollH;
+          const thumbH = Math.max(36, Math.min(trackH - 6, Math.round((trackH - 6) * ratio)));
+          const maxThumbTop = Math.max(3, trackH - 3 - thumbH);
+          const scrollFrac = Math.max(0, Math.min(1, panelScrollBody.scrollTop / maxScroll));
+          const thumbTop = 3 + scrollFrac * (maxThumbTop - 3);
+
+          mobileScrollThumb.style.height = thumbH + 'px';
+          mobileScrollThumb.style.top = thumbTop + 'px';
+        }
+
+        function scrollBodyFromTrackClientY(clientY) {
+          if (!panelScrollBody || !mobileScrollTrack || !mobileScrollThumb) return;
+          const rect = mobileScrollTrack.getBoundingClientRect();
+          const trackH = rect.height;
+          const thumbH = mobileScrollThumb.offsetHeight || 36;
+          const minTop = 3;
+          const maxTop = Math.max(minTop, trackH - 3 - thumbH);
+          const usableSpan = Math.max(1, maxTop - minTop);
+
+          const desiredCenter = clientY - rect.top;
+          const clampedTop = Math.max(minTop, Math.min(maxTop, desiredCenter - thumbH * 0.5));
+          const frac = (clampedTop - minTop) / usableSpan;
+
+          const maxScroll = Math.max(0, panelScrollBody.scrollHeight - panelScrollBody.clientHeight);
+          panelScrollBody.scrollTop = frac * maxScroll;
+          syncMobileScrollThumb();
+        }
+
+        let draggingMobileScroll = false;
+
+        mobileScrollTrack.addEventListener('touchstart', (e) => {
+          if (e.touches.length > 0) {
+            e.preventDefault();
+            draggingMobileScroll = true;
+            scrollBodyFromTrackClientY(e.touches[0].clientY);
+          }
+        }, { passive: false });
+
+        mobileScrollTrack.addEventListener('touchmove', (e) => {
+          if (draggingMobileScroll && e.touches.length > 0) {
+            e.preventDefault();
+            scrollBodyFromTrackClientY(e.touches[0].clientY);
+          }
+        }, { passive: false });
+
+        const stopMobileScrollDrag = () => {
+          draggingMobileScroll = false;
+        };
+        mobileScrollTrack.addEventListener('touchend', stopMobileScrollDrag);
+        mobileScrollTrack.addEventListener('touchcancel', stopMobileScrollDrag);
+
+        panelScrollBody.addEventListener('scroll', syncMobileScrollThumb, { passive: true });
+        window.addEventListener('resize', syncMobileScrollThumb);
+        if (typeof ResizeObserver !== 'undefined') {
+          const scrollRo = new ResizeObserver(syncMobileScrollThumb);
+          scrollRo.observe(panelScrollBody);
+          scrollRo.observe(mobileScrollTrack);
+        }
+        setTimeout(syncMobileScrollThumb, 50);
+
+        // Mode Toggle (2D / 3D)
+        const btnMode2D = document.getElementById('btn-mode-2d');
+        const btnMode3D = document.getElementById('btn-mode-3d');
+        const hudMode = document.getElementById('hud-mode');
+        const pillDetail = document.getElementById('pill-detail');
+        let targetTankDepthScale = 1.0;
+
+        function formatDetailLabel() {
+          const tier = sim.detail < 35 ? 'Low' : (sim.detail < 75 ? 'Med' : 'High');
+          return tier + ' · ' + sim.targetCount.toLocaleString();
+        }
+
+        function setMode(newMode) {
+          if (sim.mode === newMode) return;
+          sim.mode = newMode;
+          hudMode.textContent = newMode;
+          quickModeLabel.textContent = newMode;
+
+          btnMode2D.classList.toggle('active', newMode === '2D');
+          btnMode3D.classList.toggle('active', newMode === '3D');
+
+          if (newMode === '2D') {
+            targetTankDepthScale = HALF_D_2D / HALF_D_3D;
+            orbit.targetTheta = 0.0;
+            orbit.targetPhi = Math.PI * 0.5;
+            orbit.targetRadius = 7.6;
+
+            for (let m = 0; m < MAX_OBJECTS; m++) {
+              if (!objActive[m]) continue;
+              objZ[m] = 0.0;
+              objVz[m] = 0.0;
+              objWx[m] = 0.0;
+              objWy[m] = 0.0;
+              objQx[m] = 0.0;
+              objQy[m] = 0.0;
+              const qLen = Math.hypot(objQz[m], objQw[m]);
+              if (qLen > 1e-6) {
+                objQz[m] /= qLen;
+                objQw[m] /= qLen;
+              } else {
+                objQz[m] = 0.0;
+                objQw[m] = 1.0;
+              }
+              updateObjectRotMatrix(m);
+              if (objMeshes[m]) {
+                const s = objScale[m];
+                objMeshes[m].scale.set(s, s, Math.min(s, 0.56));
+              }
+            }
+          } else {
+            targetTankDepthScale = 1.0;
+            orbit.targetTheta = 0.34;
+            orbit.targetPhi = 1.24;
+            orbit.targetRadius = 8.6;
+
+            for (let m = 0; m < MAX_OBJECTS; m++) {
+              if (objActive[m] && objMeshes[m]) {
+                const s = objScale[m];
+                objMeshes[m].scale.set(s, s, s);
+              }
+            }
+          }
+
+          rebuildGhostPreview();
+          initializeFluidVolume();
+          pillDetail.textContent = formatDetailLabel();
+        }
+
+        btnMode2D.addEventListener('click', () => setMode('2D'));
+        btnMode3D.addEventListener('click', () => setMode('3D'));
+        btnQuickMode.addEventListener('click', () => setMode(sim.mode === '3D' ? '2D' : '3D'));
+
+        function updateSliderFill(el) {
+          const min = parseFloat(el.min) || 0;
+          const max = parseFloat(el.max) || 100;
+          const val = parseFloat(el.value) || 0;
+          const pct = ((val - min) / Math.max(1e-5, max - min)) * 100;
+          el.style.setProperty('--pct', pct.toFixed(1) + '%');
+        }
+
+        const sliderFusion = document.getElementById('slider-fusion');
+        const pillFusion = document.getElementById('pill-fusion');
+        sliderFusion.addEventListener('input', () => {
+          updateSliderFill(sliderFusion);
+          const pct = parseInt(sliderFusion.value, 10);
+          sim.fusion = pct / 100.0;
+          if (pct === 0) pillFusion.textContent = 'Balls';
+          else if (pct < 60) pillFusion.textContent = 'Coating · ' + pct + '%';
+          else if (pct < 100) pillFusion.textContent = 'Fusing · ' + pct + '%';
+          else pillFusion.textContent = 'Pure Liquid';
+        });
+
+        const sliderAmount = document.getElementById('slider-amount');
+        const pillAmount = document.getElementById('pill-amount');
+        sliderAmount.addEventListener('input', () => {
+          updateSliderFill(sliderAmount);
+          sim.amount = parseInt(sliderAmount.value, 10);
+          pillAmount.textContent = sim.amount + '%';
+          updateSolverParameters();
+          pillDetail.textContent = formatDetailLabel();
+        });
+
+        const sliderWaves = document.getElementById('slider-waves');
+        const pillWaves = document.getElementById('pill-waves');
+        sliderWaves.addEventListener('input', () => {
+          updateSliderFill(sliderWaves);
+          const pct = parseInt(sliderWaves.value, 10);
+          sim.waveIntensity = pct / 100.0;
+          pillWaves.textContent = pct + '%';
+        });
+
+        const sliderMagnet = document.getElementById('slider-magnet');
+        const pillMagnet = document.getElementById('pill-magnet');
+        sliderMagnet.addEventListener('input', () => {
+          updateSliderFill(sliderMagnet);
+          const pct = parseInt(sliderMagnet.value, 10);
+          sim.magnetPower = pct / 100.0;
+          pillMagnet.textContent = pct + '%';
+        });
+
+        const sliderDetail = document.getElementById('slider-detail');
+        sliderDetail.value = sim.detail;
+        sliderDetail.addEventListener('input', () => {
+          updateSliderFill(sliderDetail);
+          sim.detail = parseInt(sliderDetail.value, 10);
+          updateSolverParameters();
+          pillDetail.textContent = formatDetailLabel();
+        });
+
+        [sliderFusion, sliderAmount, sliderWaves, sliderMagnet, sliderDetail].forEach(updateSliderFill);
+
+        const colorDots = document.querySelectorAll('.color-dot');
+        const inputCustomColor = document.getElementById('input-custom-color');
+        const waterColorOrb = document.getElementById('water-color-orb');
+        const pillColor = document.getElementById('pill-color');
+
+        function applyWaterColor(hex) {
+          sim.waterHex = hex;
+          sim.waterColor.set(hex);
+          inputCustomColor.value = hex;
+          pillColor.textContent = hex.toUpperCase();
+          if (waterColorOrb) waterColorOrb.style.background = hex;
+
+          const uiAccentColor = sim.waterColor.clone().lerp(new THREE.Color('#38bdf8'), 0.36);
+          const uiHex = '#' + uiAccentColor.getHexString();
+          document.documentElement.style.setProperty('--accent', hex);
+          document.documentElement.style.setProperty('--accent-ui', uiHex);
+          document.documentElement.style.setProperty('--accent-glow', uiHex + '48');
+
+          causticUniforms.uWaterColor.value.copy(sim.waterColor).lerp(new THREE.Color('#38bdf8'), 0.28);
+          sphereMat.color.copy(sim.waterColor);
+          waterMat.color.copy(sim.waterColor);
+          if (waterMat.attenuationColor) {
+            waterMat.attenuationColor.copy(sim.waterColor).multiplyScalar(0.38);
+          }
+          cursorRingMat.color.copy(sim.waterColor).lerp(new THREE.Color('#38bdf8'), 0.45);
+        }
+
+        inputCustomColor.addEventListener('input', () => {
+          applyWaterColor(inputCustomColor.value);
+        });
+        applyWaterColor(sim.waterHex);
+
+        function triggerSplash() {
+          const n = sim.activeCount;
+          const is3D = sim.mode === '3D';
+          for (let i = 0; i < n; i++) {
+            const rx = px[i];
+            const rz = is3D ? pz[i] : 0.0;
+            const dist = Math.hypot(rx, rz);
+            if (dist < 1.3) {
+              const impulse = 1.0 - dist / 1.3;
+              vy[i] += 5.4 * impulse;
+              vx[i] += (rx / (dist + 0.08)) * 3.4 * impulse;
+              if (is3D) vz[i] += (rz / (dist + 0.08)) * 3.4 * impulse;
+            }
+          }
+        }
+
+        document.getElementById('btn-splash').addEventListener('click', triggerSplash);
+        btnQuickSplash.addEventListener('click', triggerSplash);
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+          sim.waveIntensity = 0;
+          sim.smoothWave = 0;
+          sim.wavePhase = 0;
+          sim.tankX = 0;
+          sim.tankVx = 0;
+          sim.tankAx = 0;
+          sliderWaves.value = 0;
+          updateSliderFill(sliderWaves);
+          pillWaves.textContent = '0%';
+          clearAllObjects();
+          initializeFluidVolume();
+          pillDetail.textContent = formatDetailLabel();
+        });
+
+        // =========================================================================
+        // 8B. OBJECTS DESIGNER TAB & PLACEMENT UI BINDINGS
+        // =========================================================================
+        const tabBtnFluid = document.getElementById('tab-btn-fluid');
+        const tabBtnObjects = document.getElementById('tab-btn-objects');
+        const panelFluid = document.getElementById('panel-fluid');
+        const panelObjects = document.getElementById('panel-objects');
+        const gestureHintText = document.getElementById('gesture-hint-text');
+
+        function updateGestureHintLabel() {
+          if (!gestureHintText) return;
+          if (isObjectPlacementMode()) {
+            gestureHintText.innerHTML = '<span>1-finger: <strong>Place Object</strong></span><span style="opacity:0.4;">•</span><span>2-finger: <strong>Orbit</strong></span>';
+          } else {
+            gestureHintText.innerHTML = '<span>1-finger: <strong>Magnet</strong></span><span style="opacity:0.4;">•</span><span>2-finger: <strong>Orbit</strong></span>';
+          }
+        }
+
+        function setActiveTab(tabName) {
+          sim.activeTab = tabName;
+          const isObj = tabName === 'objects';
+
+          panelFluid.classList.toggle('hidden', isObj);
+          panelObjects.classList.toggle('hidden', !isObj);
+
+          tabBtnObjects.classList.toggle('active', isObj);
+          tabBtnFluid.classList.toggle('active', !isObj);
+          if (!isObj) ghostHasHover = false;
+
+          sim.pointerActive = false;
+          sim.grabbedIdx = -1;
+          updateGestureHintLabel();
+        }
+
+        tabBtnFluid.addEventListener('click', () => setActiveTab('fluid'));
+        tabBtnObjects.addEventListener('click', () => setActiveTab('objects'));
+
+        const shapeCards = document.querySelectorAll('.shape-card');
+        const pillObjShape = document.getElementById('pill-obj-shape');
+        const shapeLabels = {
+          sphere: 'Buoy Sphere',
+          cube: 'Cargo Cube',
+          duck: 'Rubber Duck'
+        };
+
+        shapeCards.forEach((card) => {
+          card.addEventListener('click', () => {
+            objDesigner.shape = card.dataset.shape;
+            pillObjShape.textContent = shapeLabels[objDesigner.shape] || 'Buoy Sphere';
+            shapeCards.forEach((c) => c.classList.toggle('active', c === card));
+            rebuildGhostPreview();
+          });
+        });
+
+        const sliderObjSize = document.getElementById('slider-obj-size');
+        const pillObjSize = document.getElementById('pill-obj-size');
+        updateSliderFill(sliderObjSize);
+        sliderObjSize.addEventListener('input', () => {
+          updateSliderFill(sliderObjSize);
+          objDesigner.size = parseInt(sliderObjSize.value, 10);
+          pillObjSize.textContent = objDesigner.size + '%';
+          if (ghostMesh) {
+            const s = objDesigner.size / 100.0;
+            const zScale = sim.mode === '2D' ? Math.min(s, 0.56) : s;
+            ghostMesh.scale.set(s, s, zScale);
+          }
+        });
+
+        const buoyBtns = document.querySelectorAll('.buoy-btn');
+        const pillObjDensity = document.getElementById('pill-obj-density');
+        const buoyDensities = {
+          light: 0.35,
+          balanced: 0.68,
+          heavy: 1.55
+        };
+
+        buoyBtns.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            objDesigner.buoyancy = btn.dataset.buoyancy;
+            objDesigner.density = buoyDensities[objDesigner.buoyancy] || 0.35;
+            pillObjDensity.textContent = objDesigner.density.toFixed(2) + 'x Density';
+            buoyBtns.forEach((b) => b.classList.toggle('active', b === btn));
+          });
+        });
+
+        const objColorDots = document.querySelectorAll('.obj-color-dot');
+        const inputObjColor = document.getElementById('input-obj-color');
+        const customObjColorSwatch = document.getElementById('custom-obj-color-swatch');
+        const pillObjColor = document.getElementById('pill-obj-color');
+
+        function applyObjectColor(hex) {
+          objDesigner.color = hex;
+          inputObjColor.value = hex;
+          pillObjColor.textContent = hex.toUpperCase();
+
+          let matched = false;
+          objColorDots.forEach((dot) => {
+            const isMatch = dot.dataset.objcolor.toLowerCase() === hex.toLowerCase();
+            dot.classList.toggle('selected', isMatch);
+            if (isMatch) matched = true;
+          });
+
+          customObjColorSwatch.style.borderColor = matched ? '' : hex;
+          customObjColorSwatch.style.borderWidth = matched ? '' : '2px';
+          rebuildGhostPreview();
+        }
+
+        objColorDots.forEach((dot) => {
+          dot.addEventListener('click', () => applyObjectColor(dot.dataset.objcolor));
+        });
+        inputObjColor.addEventListener('input', () => applyObjectColor(inputObjColor.value));
+
+        const btnInteractPlace = document.getElementById('btn-interact-place');
+        const btnInteractStir = document.getElementById('btn-interact-stir');
+
+        function setObjectInteractMode(mode) {
+          sim.objectInteractMode = mode;
+          const isPlace = mode === 'place';
+
+          btnInteractPlace.classList.toggle('active', isPlace);
+          btnInteractStir.classList.toggle('active', !isPlace);
+
+          if (!isPlace) ghostHasHover = false;
+          sim.pointerActive = false;
+          sim.grabbedIdx = -1;
+          updateGestureHintLabel();
+        }
+
+        btnInteractPlace.addEventListener('click', () => setObjectInteractMode('place'));
+        btnInteractStir.addEventListener('click', () => setObjectInteractMode('stir'));
+
+        document.getElementById('btn-drop-object').addEventListener('click', () => {
+          const jitterX = (Math.random() - 0.5) * 1.4;
+          const jitterZ = sim.mode === '3D' ? (Math.random() - 0.5) * 0.9 : 0.0;
+          spawnDesignedObject(jitterX, jitterZ);
+        });
+
+        document.getElementById('btn-clear-objects').addEventListener('click', clearAllObjects);
+
+        // =========================================================================
+        // 9. INITIALIZE & RUN 60 FPS RENDER LOOP
+        // =========================================================================
+        initializeFluidVolume();
+        pillDetail.textContent = formatDetailLabel();
+        resizeViewport();
+
+        const hudFps = document.getElementById('hud-fps');
+        let lastTime = performance.now();
+        let fpsFrames = 0;
+        let fpsTimer = 0;
+
+        function animate(now) {
+          requestAnimationFrame(animate);
+
+          const rawDt = (now - lastTime) * 0.001;
+          lastTime = now;
+          const dt = Math.min(0.033, Math.max(0.003, rawDt));
+
+          fpsFrames++;
+          fpsTimer += rawDt;
+          if (fpsTimer >= 0.35) {
+            const fps = Math.min(120, Math.round(fpsFrames / fpsTimer));
+            hudFps.textContent = fps + ' FPS';
+            fpsFrames = 0;
+            fpsTimer = 0;
+          }
+
+          if (sim.pointerActive) {
+            const invDt = 1.0 / dt;
+            const tvx = (sim.pointerX - sim.prevPointerX) * invDt;
+            const tvy = (sim.pointerY - sim.prevPointerY) * invDt;
+            const tvz = (sim.pointerZ - sim.prevPointerZ) * invDt;
+            sim.pointerVx += (tvx - sim.pointerVx) * 0.35;
+            sim.pointerVy += (tvy - sim.pointerVy) * 0.35;
+            sim.pointerVz += (tvz - sim.pointerVz) * 0.35;
+            sim.prevPointerX = sim.pointerX;
+            sim.prevPointerY = sim.pointerY;
+            sim.prevPointerZ = sim.pointerZ;
+          }
+
+          reconcileParticlePopulation(dt);
+          stepPhysics(dt);
+
+          updateCameraFromOrbit();
+          tankGroup.position.x = sim.tankX;
+          objectsGroup.position.x = sim.tankX;
+          sphereMesh.position.x = sim.tankX;
+          waterMesh.position.x = sim.tankX;
+          tankGroup.scale.z += (targetTankDepthScale - tankGroup.scale.z) * 0.18;
+
+          for (let m = 0; m < MAX_OBJECTS; m++) {
+            if (objActive[m] && objMeshes[m]) {
+              objMeshes[m].position.set(objX[m], objY[m], objZ[m]);
+              objMeshes[m].quaternion.set(objQx[m], objQy[m], objQz[m], objQw[m]);
+            }
+          }
+
+          if (ghostMesh) {
+            const showGhost = isObjectPlacementMode() && ghostHasHover;
+            ghostMesh.visible = showGhost;
+            if (showGhost) {
+              const s = objDesigner.size / 100.0;
+              const r = getShapeBaseRadius(getShapeCodeFromName(objDesigner.shape)) * s;
+              const hoverY = Math.min(HALF_H - r, estimateWaterSurfaceY() + r + 0.14 + Math.sin(now * 0.006) * 0.03);
+              ghostMesh.position.set(ghostTargetX + sim.tankX, hoverY, ghostTargetZ);
+              ghostMesh.rotation.y = sim.mode === '3D' ? Math.sin(now * 0.002) * 0.35 : 0.0;
+            }
+          }
+
+          const targetRingAlpha = (sim.pointerActive && !isObjectPlacementMode()) ? 0.85 : 0.0;
+          cursorRingMat.opacity += (targetRingAlpha - cursorRingMat.opacity) * 0.22;
+          if (cursorRingMat.opacity > 0.01) {
+            cursorRing.lookAt(camera.position);
+            const rScale = 0.72 + sim.magnetPower * 0.65 + Math.sin(now * 0.008) * 0.04;
+            cursorRing.scale.set(rScale, rScale, 1.0);
+          }
+
+          causticUniforms.uTime.value = now * 0.001;
+          causticUniforms.uFillLevel.value = sim.amount / 100.0;
+          causticUniforms.uWavePower.value = sim.smoothWave;
+
+          const n = sim.activeCount;
+          const showSpheres = sim.fusion < 0.995;
+          const showWaterMesh = sim.fusion > 0.005;
+
+          sphereMesh.visible = showSpheres;
+          waterMesh.visible = showWaterMesh;
+
+          if (showSpheres) {
+            const matArr = sphereMesh.instanceMatrix.array;
+            const s = sim.particleRadius * (sim.mode === '3D' ? 1.18 : 1.14);
+            for (let i = 0; i < n; i++) {
+              const o = i << 4;
+              matArr[o] = s;
+              matArr[o + 5] = s;
+              matArr[o + 10] = s;
+              matArr[o + 12] = px[i];
+              matArr[o + 13] = py[i];
+              matArr[o + 14] = pz[i];
+              matArr[o + 15] = 1.0;
+            }
+            sphereMesh.count = n;
+            sphereMesh.instanceMatrix.needsUpdate = true;
+            sphereMat.opacity = sim.fusion <= 0.005
+              ? 1.0
+              : Math.max(0.0, 1.0 - Math.pow(sim.fusion, 1.35));
+            sphereMat.depthWrite = sim.fusion <= 0.005;
+          }
+
+          if (showWaterMesh) {
+            rebuildSurfaceNetsMesh();
+            waterMat.opacity = sim.fusion >= 0.995
+              ? 0.72
+              : (0.28 + 0.44 * sim.fusion);
+          }
+
+          renderer.render(scene, camera);
+        }
+
+        requestAnimationFrame(animate);
+      }
+
+      if (document.readyState === 'loading') {
+        window.addEventListener('DOMContentLoaded', initHydroMesh);
+      } else {
+        initHydroMesh();
+      }
+    })();
+  </script>
+</body>
+</html>
