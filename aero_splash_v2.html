@@ -1,0 +1,5107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>HydroMesh: Aero Splash — 3D Fluid Water-Gun Arena</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --aero-cyan: #00b4ff;
+      --aero-teal: #00e5c3;
+      --aero-lime: #4ade80;
+      --aero-coral: #ff3b7f;
+      --glass-border: rgba(255, 255, 255, 0.84);
+      --glass-shadow: 0 14px 36px rgba(3, 54, 102, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.94);
+      --text-ink: #072642;
+      --text-soft: #2b5478;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(180deg, #1ea7ff 0%, #7ee8ff 55%, #b8f7ff 100%);
+      color: var(--text-ink);
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    #game-root {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #gl-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+      touch-action: none;
+    }
+
+    /* Frutiger-Aero Glossy Glass Surfaces */
+    .aero-glass {
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.86) 0%, rgba(226, 246, 255, 0.64) 52%, rgba(174, 234, 255, 0.72) 100%);
+      backdrop-filter: blur(18px) saturate(165%);
+      -webkit-backdrop-filter: blur(18px) saturate(165%);
+      border: 1.5px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+    }
+
+    .aero-pill {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(214, 244, 255, 0.78) 100%);
+      border: 1.5px solid rgba(255, 255, 255, 0.94);
+      box-shadow: 0 6px 18px rgba(4, 65, 118, 0.16), inset 0 1px 0 #ffffff;
+    }
+
+    /* =========================================================================
+       TOP HUD OVERLAY
+       ========================================================================= */
+    #hud-top {
+      position: absolute;
+      top: max(12px, env(safe-area-inset-top));
+      left: max(12px, env(safe-area-inset-left));
+      right: max(12px, env(safe-area-inset-right));
+      z-index: 20;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .hud-cluster {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+      flex-wrap: wrap;
+    }
+
+    .hud-btn {
+      pointer-events: auto;
+      touch-action: manipulation;
+      min-height: 40px;
+      padding: 0 12px;
+      border-radius: 999px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-ink);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), filter 0.16s ease;
+    }
+
+    .hud-btn:hover {
+      transform: translateY(-1px) scale(1.03);
+      filter: brightness(1.04);
+    }
+
+    .hud-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* Match Scoreboard Pill */
+    #scoreboard-pill {
+      border-radius: 22px;
+      padding: 7px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .score-side {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .score-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    .score-label {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-soft);
+    }
+
+    .score-num {
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .score-divider {
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(0, 180, 255, 0.16);
+      color: #0369a1;
+      border: 1px solid rgba(0, 180, 255, 0.32);
+    }
+
+    /* Soak Health Bars */
+    #health-bars-wrap {
+      position: absolute;
+      top: calc(max(12px, env(safe-area-inset-top)) + 54px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 19;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      pointer-events: none;
+      width: min(540px, calc(100vw - 24px));
+    }
+
+    .hp-card {
+      flex: 1 1 0;
+      border-radius: 16px;
+      padding: 6px 11px;
+    }
+
+    .hp-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .hp-track {
+      width: 100%;
+      height: 9px;
+      border-radius: 999px;
+      background: rgba(7, 38, 66, 0.14);
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.78);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.16);
+    }
+
+    .hp-fill {
+      height: 100%;
+      width: 100%;
+      border-radius: 999px;
+      transition: width 0.12s ease-out;
+    }
+
+    #player-hp-fill {
+      background: linear-gradient(90deg, #0095ff 0%, #00e5ff 55%, #7bf6ff 100%);
+      box-shadow: 0 0 12px rgba(0, 180, 255, 0.6);
+    }
+
+    #bot-hp-fill {
+      background: linear-gradient(90deg, #ff2a6d 0%, #ff6b9d 60%, #ffb3cc 100%);
+      box-shadow: 0 0 12px rgba(255, 59, 127, 0.55);
+    }
+
+    /* =========================================================================
+       CENTERED CROSSHAIR RETICLE (50% X, 50% Y) & HITMARKERS
+       ========================================================================= */
+    #crosshair-wrap {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 18;
+      pointer-events: none;
+      width: 64px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #crosshair-ring {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2.2px solid rgba(255, 255, 255, 0.95);
+      box-shadow: 0 0 10px rgba(0, 180, 255, 0.85), inset 0 0 6px rgba(0, 180, 255, 0.55);
+      transition: width 0.08s ease-out, height 0.08s ease-out, border-color 0.1s ease, box-shadow 0.1s ease;
+    }
+
+    .ch-tick {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.92);
+      border-radius: 2px;
+      box-shadow: 0 0 6px rgba(0, 180, 255, 0.85);
+      transition: transform 0.08s ease-out, background 0.1s ease;
+    }
+
+    #ch-tick-n { width: 2px; height: 6px; top: 8px; }
+    #ch-tick-s { width: 2px; height: 6px; bottom: 8px; }
+    #ch-tick-w { width: 6px; height: 2px; left: 8px; }
+    #ch-tick-e { width: 6px; height: 2px; right: 8px; }
+
+    #crosshair-wrap.on-target #crosshair-ring {
+      border-color: #ff3b7f;
+      box-shadow: 0 0 14px rgba(255, 59, 127, 0.95), inset 0 0 8px rgba(255, 59, 127, 0.65);
+    }
+
+    #crosshair-wrap.on-target #crosshair-dot,
+    #crosshair-wrap.on-target .ch-tick {
+      background: #ff3b7f;
+      box-shadow: 0 0 10px #ff3b7f;
+    }
+
+    #crosshair-dot {
+      position: absolute;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 0 8px #00b4ff;
+      transition: background 0.1s ease, box-shadow 0.1s ease;
+    }
+
+    #hitmarker {
+      position: absolute;
+      width: 34px;
+      height: 34px;
+      opacity: 0;
+      transform: scale(0.7);
+      transition: opacity 0.11s ease, transform 0.11s ease;
+    }
+
+    #hitmarker.active {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+
+    /* =========================================================================
+       BOTTOM TANK PRESSURE & MOVEMENT STATE HUD
+       ========================================================================= */
+    #hud-bottom-center {
+      position: absolute;
+      bottom: max(14px, env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 19;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      width: min(330px, 68vw);
+    }
+
+    #move-state-pill {
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    #tank-hud-card {
+      width: 100%;
+      border-radius: 16px;
+      padding: 7px 12px;
+    }
+
+    .tank-bar-track {
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(7, 38, 66, 0.15);
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.85);
+    }
+
+    #tank-bar-fill {
+      height: 100%;
+      width: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #0284c7 0%, #00b4ff 50%, #38f9d7 100%);
+      box-shadow: 0 0 12px rgba(0, 229, 195, 0.65);
+      transition: width 0.05s linear;
+    }
+
+    #banner-toast {
+      position: absolute;
+      top: 24%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.92);
+      z-index: 25;
+      pointer-events: none;
+      padding: 10px 22px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      opacity: 0;
+      transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+      white-space: nowrap;
+    }
+
+    #banner-toast.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    #pointer-hint {
+      position: absolute;
+      top: calc(max(12px, env(safe-area-inset-top)) + 98px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 21;
+      padding: 6px 16px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-ink);
+      pointer-events: auto;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(2, 132, 199, 0.28), inset 0 1px 0 #ffffff;
+      transition: opacity 0.22s ease, transform 0.16s ease;
+    }
+
+    #pointer-hint:hover {
+      transform: translateX(-50%) scale(1.03);
+    }
+
+    /* =========================================================================
+       MOBILE MULTI-TOUCH JOYSTICK & ACTION BUTTONS
+       ========================================================================= */
+    #mobile-controls {
+      position: absolute;
+      inset: 0;
+      z-index: 22;
+      pointer-events: none;
+    }
+
+    #joystick-zone {
+      position: absolute;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      left: max(18px, env(safe-area-inset-left));
+      width: 128px;
+      height: 128px;
+      border-radius: 50%;
+      pointer-events: auto;
+      touch-action: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .joy-ring-inner {
+      position: absolute;
+      inset: 14px;
+      border-radius: 50%;
+      border: 1.5px dashed rgba(7, 38, 66, 0.24);
+      pointer-events: none;
+    }
+
+    .joy-sprint-tag {
+      position: absolute;
+      top: 6px;
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      color: #0369a1;
+      opacity: 0.78;
+      pointer-events: none;
+    }
+
+    #joystick-knob {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: linear-gradient(145deg, #38bdf8 0%, #0284c7 100%);
+      border: 2.5px solid #ffffff;
+      box-shadow: 0 8px 20px rgba(2, 132, 199, 0.45), inset 0 2px 3px rgba(255, 255, 255, 0.7);
+      pointer-events: none;
+      transform: translate3d(0, 0, 0);
+      transition: transform 0.08s ease-out;
+    }
+
+    #joystick-zone.active #joystick-knob {
+      transition: none;
+      filter: brightness(1.1);
+    }
+
+    #mobile-actions {
+      position: absolute;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      right: max(18px, env(safe-area-inset-right));
+      width: 164px;
+      height: 164px;
+      pointer-events: none;
+    }
+
+    .touch-act-btn {
+      position: absolute;
+      pointer-events: auto;
+      touch-action: none;
+      border-radius: 50%;
+      font-family: inherit;
+      font-weight: 800;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      cursor: pointer;
+      transition: transform 0.1s ease, filter 0.1s ease;
+    }
+
+    .touch-act-btn:active,
+    .touch-act-btn.pressed {
+      transform: scale(0.91);
+      filter: brightness(1.12);
+    }
+
+    #btn-touch-shoot {
+      right: 0;
+      bottom: 6px;
+      width: 84px;
+      height: 84px;
+      background: linear-gradient(145deg, #00d2ff 0%, #0080ff 100%);
+      border: 3px solid #ffffff;
+      color: #ffffff;
+      font-size: 12px;
+      box-shadow: 0 10px 26px rgba(0, 128, 255, 0.48), inset 0 2px 4px rgba(255, 255, 255, 0.75);
+    }
+
+    #btn-touch-jump {
+      right: 12px;
+      top: 0;
+      width: 60px;
+      height: 60px;
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.92) 0%, rgba(186, 236, 255, 0.85) 100%);
+      border: 2px solid #ffffff;
+      color: var(--text-ink);
+      font-size: 11px;
+      box-shadow: 0 8px 20px rgba(4, 65, 118, 0.24);
+    }
+
+    #btn-touch-slide {
+      left: 4px;
+      bottom: 12px;
+      width: 62px;
+      height: 62px;
+      background: linear-gradient(145deg, #4ade80 0%, #059669 100%);
+      border: 2.5px solid #ffffff;
+      color: #ffffff;
+      font-size: 11px;
+      box-shadow: 0 8px 20px rgba(5, 150, 105, 0.35), inset 0 2px 3px rgba(255, 255, 255, 0.65);
+    }
+
+    /* =========================================================================
+       START & END-OF-MATCH FRUTIGER-AERO MODALS
+       ========================================================================= */
+    .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: radial-gradient(circle at 50% 35%, rgba(0, 180, 255, 0.24) 0%, rgba(4, 34, 66, 0.56) 100%);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .modal-card {
+      width: min(468px, 100%);
+      border-radius: 28px;
+      padding: 24px 22px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .modal-card::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      left: -15%;
+      width: 130%;
+      height: 62%;
+      background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.0) 72%);
+      pointer-events: none;
+    }
+
+    .game-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: linear-gradient(90deg, rgba(0, 180, 255, 0.22), rgba(74, 222, 128, 0.25));
+      color: #0369a1;
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      margin-bottom: 8px;
+    }
+
+    .modal-title {
+      margin: 0 0 6px 0;
+      font-size: clamp(24px, 5vw, 32px);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #034a85 0%, #0088e8 50%, #00b894 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .modal-sub {
+      margin: 0 0 16px 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text-soft);
+      font-weight: 500;
+    }
+
+    .color-picker-section {
+      background: rgba(255, 255, 255, 0.56);
+      border: 1.5px solid rgba(255, 255, 255, 0.88);
+      border-radius: 18px;
+      padding: 12px;
+      margin-bottom: 14px;
+    }
+
+    .section-caption {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-soft);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .char-swatches {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .char-swatch {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 2.5px solid rgba(255, 255, 255, 0.92);
+      box-shadow: 0 4px 12px rgba(7, 38, 66, 0.18), inset 0 2px 3px rgba(255, 255, 255, 0.65);
+      cursor: pointer;
+      transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.16s ease;
+    }
+
+    .char-swatch:hover {
+      transform: scale(1.1);
+    }
+
+    .char-swatch.selected {
+      transform: scale(1.16);
+      border: 3px solid #072642;
+      box-shadow: 0 0 0 3px rgba(0, 180, 255, 0.45), 0 6px 16px rgba(7, 38, 66, 0.25);
+    }
+
+    .mode-selector-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 9px;
+    }
+
+    .mode-option-btn {
+      border-radius: 14px;
+      padding: 10px 10px;
+      border: 1.5px solid rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.58);
+      color: var(--text-ink);
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1), background 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .mode-option-btn:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.82);
+    }
+
+    .mode-option-btn.selected {
+      background: linear-gradient(155deg, rgba(0, 180, 255, 0.24) 0%, rgba(74, 222, 128, 0.26) 100%);
+      border: 2px solid #0284c7;
+      box-shadow: 0 6px 16px rgba(2, 132, 199, 0.22), inset 0 1px 0 #ffffff;
+    }
+
+    .mode-option-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-ink);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .mode-option-desc {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-soft);
+      line-height: 1.3;
+    }
+
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 7px;
+      margin-bottom: 18px;
+      text-align: left;
+    }
+
+    .ctrl-chip {
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      border-radius: 12px;
+      padding: 7px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-ink);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .kbd-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: rgba(0, 180, 255, 0.16);
+      color: #0369a1;
+      border: 1px solid rgba(0, 180, 255, 0.3);
+      white-space: nowrap;
+    }
+
+    .modal-btn-row {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .aero-cta-btn {
+      width: 100%;
+      min-height: 50px;
+      border-radius: 999px;
+      border: 2px solid #ffffff;
+      background: linear-gradient(180deg, #38bdf8 0%, #0284c7 52%, #0369a1 100%);
+      color: #ffffff;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow: 0 10px 26px rgba(2, 132, 199, 0.42), inset 0 2px 3px rgba(255, 255, 255, 0.72);
+      transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), filter 0.16s ease;
+    }
+
+    .aero-cta-btn:hover {
+      transform: translateY(-2px) scale(1.015);
+      filter: brightness(1.06);
+    }
+
+    .aero-cta-btn:active {
+      transform: scale(0.97);
+    }
+
+    .aero-secondary-btn {
+      width: 100%;
+      min-height: 44px;
+      border-radius: 999px;
+      border: 1.5px solid #ffffff;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(214, 244, 255, 0.82) 100%);
+      color: var(--text-ink);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(4, 65, 118, 0.16), inset 0 1px 0 #ffffff;
+      transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), filter 0.16s ease;
+    }
+
+    .aero-secondary-btn:hover {
+      transform: translateY(-1px) scale(1.01);
+      filter: brightness(1.03);
+    }
+
+    .aero-secondary-btn:active {
+      transform: scale(0.97);
+    }
+
+    @media (max-width: 680px) {
+      #hud-top {
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      #scoreboard-pill {
+        order: 3;
+        width: 100%;
+        justify-content: center;
+        padding: 5px 12px;
+      }
+      #health-bars-wrap {
+        top: calc(max(12px, env(safe-area-inset-top)) + 96px);
+      }
+      #pointer-hint {
+        top: calc(max(12px, env(safe-area-inset-top)) + 144px);
+      }
+      .hud-btn {
+        min-height: 36px;
+        padding: 0 9px;
+        font-size: 11px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="game-root">
+    <canvas id="gl-canvas"></canvas>
+
+    <!-- Top Match Scoreboard & Utility Buttons -->
+    <header id="hud-top">
+      <div class="hud-cluster">
+        <div class="aero-pill" style="padding:7px 12px; border-radius:999px; display:flex; align-items:center; gap:7px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" fill="#38bdf8" fill-opacity="0.35"/>
+          </svg>
+          <span style="font-size:12px; font-weight:800; letter-spacing:-0.01em;">HydroMesh</span>
+          <span id="hud-fps" class="mono" style="font-size:10px; font-weight:700; padding:2px 6px; border-radius:999px; background:rgba(16,185,129,0.18); color:#047857;">60 FPS</span>
+        </div>
+        <button id="btn-start-screen-hud" type="button" class="aero-pill hud-btn" title="Return to Start Screen (Hotkey: Q)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          <span>Start Screen (Q)</span>
+        </button>
+      </div>
+
+      <div id="scoreboard-pill" class="aero-glass">
+        <div class="score-side">
+          <span class="score-dot" style="background:#00b4ff; color:#00b4ff;"></span>
+          <span class="score-label">You</span>
+          <span id="score-player" class="mono score-num" style="color:#0284c7;">0</span>
+        </div>
+        <span id="score-divider-badge" class="score-divider">FIRST TO 5</span>
+        <div id="bot-score-side" class="score-side">
+          <span id="score-bot" class="mono score-num" style="color:#e11d48;">0</span>
+          <span class="score-label">Bot</span>
+          <span class="score-dot" style="background:#ff3b7f; color:#ff3b7f;"></span>
+        </div>
+      </div>
+
+      <div class="hud-cluster">
+        <button id="btn-toggle-invert" type="button" class="aero-pill hud-btn" title="Cycle Camera Inversion (Hotkey: I)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="7 10 12 5 17 10"/>
+            <polyline points="17 14 12 19 7 14"/>
+          </svg>
+          <span id="invert-mode-label">Invert: OFF</span>
+        </button>
+        <button id="btn-toggle-touch" type="button" class="aero-pill hud-btn" title="Toggle Mobile Touch Controls">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="6" y="2" width="12" height="20" rx="2.5"/>
+            <line x1="12" y1="18" x2="12.01" y2="18"/>
+          </svg>
+          <span id="touch-mode-label">Touch: Auto</span>
+        </button>
+        <button id="btn-toggle-audio" type="button" class="aero-pill hud-btn" title="Toggle Sound">
+          <svg id="icon-audio-on" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+          </svg>
+          <svg id="icon-audio-off" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <line x1="23" y1="9" x2="17" y2="15"/>
+            <line x1="17" y1="9" x2="23" y2="15"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Player & Bot Soak Health Meters -->
+    <div id="health-bars-wrap">
+      <div class="aero-glass hp-card">
+        <div class="hp-row">
+          <span style="color:#0369a1;">DRY METER (YOU)</span>
+          <span id="player-hp-text" class="mono">100%</span>
+        </div>
+        <div class="hp-track">
+          <div id="player-hp-fill" class="hp-fill"></div>
+        </div>
+      </div>
+      <div id="bot-hp-card" class="aero-glass hp-card">
+        <div class="hp-row">
+          <span style="color:#be123c;">DRY METER (BOT)</span>
+          <span id="bot-hp-text" class="mono">100%</span>
+        </div>
+        <div class="hp-track">
+          <div id="bot-hp-fill" class="hp-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pointer Lock Prompt -->
+    <div id="pointer-hint" class="aero-pill hidden">Click anywhere to lock aim</div>
+
+    <!-- Locked Center Crosshair (50% X, 50% Y) + Dynamic Recoil Ticks + Hitmarker -->
+    <div id="crosshair-wrap">
+      <div id="crosshair-ring"></div>
+      <div id="ch-tick-n" class="ch-tick"></div>
+      <div id="ch-tick-s" class="ch-tick"></div>
+      <div id="ch-tick-w" class="ch-tick"></div>
+      <div id="ch-tick-e" class="ch-tick"></div>
+      <div id="crosshair-dot"></div>
+      <svg id="hitmarker" viewBox="0 0 36 36" fill="none" stroke="#ffffff" stroke-width="2.8" stroke-linecap="round">
+        <line x1="6" y1="6" x2="13" y2="13"/>
+        <line x1="30" y1="6" x2="23" y2="13"/>
+        <line x1="6" y1="30" x2="13" y2="23"/>
+        <line x1="30" y1="30" x2="23" y2="23"/>
+      </svg>
+    </div>
+
+    <!-- Event Banner Toast -->
+    <div id="banner-toast" class="aero-glass">SPLASH KO! +1 POINT</div>
+
+    <!-- Bottom Water Gun Tank Pressure & Movement Status -->
+    <div id="hud-bottom-center">
+      <div id="move-state-pill" class="aero-pill">
+        <span id="move-state-dot" style="width:8px; height:8px; border-radius:50%; background:#00b4ff;"></span>
+        <span id="move-state-label">HOP WATER FLOATS · Q START SCREEN</span>
+      </div>
+      <div id="tank-hud-card" class="aero-glass">
+        <div class="hp-row" style="margin-bottom:3px;">
+          <span style="font-size:10px; color:#0369a1;">HYDRO-BLASTER PRESSURE</span>
+          <span id="tank-pct-text" class="mono" style="font-size:10px;">100%</span>
+        </div>
+        <div class="tank-bar-track">
+          <div id="tank-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile Multi-Touch Controls -->
+    <div id="mobile-controls" class="hidden">
+      <div id="joystick-zone" class="aero-glass" aria-label="Move Joystick">
+        <div class="joy-ring-inner"></div>
+        <span class="joy-sprint-tag">OUTER = SPRINT</span>
+        <div id="joystick-knob"></div>
+      </div>
+
+      <div id="mobile-actions">
+        <button id="btn-touch-jump" type="button" class="touch-act-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="18 15 12 9 6 15"/>
+          </svg>
+          <span>JUMP</span>
+        </button>
+
+        <button id="btn-touch-slide" type="button" class="touch-act-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 17h12l4-4"/>
+            <polyline points="15 13 20 13 20 18"/>
+          </svg>
+          <span>SLIDE</span>
+        </button>
+
+        <button id="btn-touch-shoot" type="button" class="touch-act-btn">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" fill="rgba(255,255,255,0.35)"/>
+          </svg>
+          <span>SHOOT</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Start / Character Customization Modal -->
+    <div id="start-modal" class="modal-backdrop">
+      <div class="aero-glass modal-card">
+        <div class="game-badge">
+          <span>FRUTIGER-AERO FLUID ARENA</span>
+        </div>
+        <h1 class="modal-title">HydroMesh: Aero Splash</h1>
+        <p class="modal-sub">
+          Blast pressurized <strong>HydroMesh SPH &amp; Surface Nets</strong> water jets across a sunny inflatable playground, hop across floating <strong>Lily Pads &amp; Aero Rafts</strong>, and avoid deep ocean water!
+        </p>
+
+        <div class="color-picker-section">
+          <div class="section-caption">
+            <span>Game Mode</span>
+            <span id="selected-mode-tag" class="mono" style="color:#0284c7;">1V1 DUEL</span>
+          </div>
+          <div class="mode-selector-grid" id="game-mode-list">
+            <button type="button" class="mode-option-btn selected" data-mode="duel">
+              <span class="mode-option-title">Arena Duel (1v1)</span>
+              <span class="mode-option-desc">First to 5 splash KOs against the rival bot</span>
+            </button>
+            <button type="button" class="mode-option-btn" data-mode="zen">
+              <span class="mode-option-title">Zen Playground</span>
+              <span class="mode-option-desc">Peaceful free-roam with no adverse bot</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="color-picker-section">
+          <div class="section-caption">
+            <span>Mecha Chameleon Suit</span>
+            <span id="selected-color-name" class="mono" style="color:#0284c7;">COOL GRAY</span>
+          </div>
+          <div class="char-swatches" id="char-swatch-list">
+            <button type="button" class="char-swatch selected" data-color="#94a3b8" data-name="COOL GRAY" style="background:#94a3b8;" aria-label="Cool Gray"></button>
+            <button type="button" class="char-swatch" data-color="#00b4ff" data-name="AERO CYAN" style="background:#00b4ff;" aria-label="Aero Cyan"></button>
+            <button type="button" class="char-swatch" data-color="#22c55e" data-name="LIME SPLASH" style="background:#22c55e;" aria-label="Lime Splash"></button>
+            <button type="button" class="char-swatch" data-color="#facc15" data-name="SOLAR GOLD" style="background:#facc15;" aria-label="Solar Gold"></button>
+            <button type="button" class="char-swatch" data-color="#fb7185" data-name="CORAL ROSE" style="background:#fb7185;" aria-label="Coral Rose"></button>
+            <button type="button" class="char-swatch" data-color="#f8fafc" data-name="GLOSS WHITE" style="background:#f8fafc;" aria-label="Gloss White"></button>
+          </div>
+        </div>
+
+        <div class="controls-grid">
+          <div class="ctrl-chip"><span>Move</span><span class="kbd-tag">W A S D</span></div>
+          <div class="ctrl-chip"><span>Aim &amp; Shoot (I: Invert)</span><span class="kbd-tag">Mouse + LMB</span></div>
+          <div class="ctrl-chip"><span>Sprint / Hurdle Jump</span><span class="kbd-tag">Shift + W / Space</span></div>
+          <div class="ctrl-chip"><span>Slide (Under Arch)</span><span class="kbd-tag">Shift + C</span></div>
+          <div class="ctrl-chip"><span>Water Lily Pads &amp; Rafts</span><span class="kbd-tag">Safe Floats!</span></div>
+          <div class="ctrl-chip"><span>Return to Start Menu</span><span class="kbd-tag">Press Q</span></div>
+        </div>
+
+        <button id="btn-start-game" type="button" class="aero-cta-btn">PLAY ARENA</button>
+      </div>
+    </div>
+
+    <!-- Victory / Defeat End-of-Match Modal -->
+    <div id="gameover-modal" class="modal-backdrop hidden">
+      <div class="aero-glass modal-card">
+        <div id="gameover-badge" class="game-badge">MATCH COMPLETE</div>
+        <h2 id="gameover-title" class="modal-title">VICTORY SPLASH!</h2>
+        <p id="gameover-sub" class="modal-sub">You soaked the rival bot 5 – 2 on the Aero Playground!</p>
+        <div class="modal-btn-row">
+          <button id="btn-rematch" type="button" class="aero-cta-btn">PLAY REMATCH</button>
+          <button id="btn-start-screen-over" type="button" class="aero-secondary-btn">STARTING SCREEN</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three.js r128 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      if (typeof window.THREE === 'undefined') {
+        document.body.innerHTML = '<div style="padding:24px;font-family:sans-serif;text-align:center;">Three.js failed to load. Please reload the page.</div>';
+        return;
+      }
+
+      // =========================================================================
+      // 1. WEB AUDIO SYNTHESIZER (WATER JETS, SPLASHES, FOOTSTEPS & CHIMES)
+      // =========================================================================
+      const SoundFX = (function () {
+        let ctx = null;
+        let enabled = true;
+        let jetGain = null;
+        let jetFilter = null;
+        let initialized = false;
+
+        function ensure() {
+          if (!enabled) return false;
+          if (!ctx) {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return false;
+            ctx = new AC();
+          }
+          if (ctx.state === 'suspended') {
+            ctx.resume().catch(() => {});
+          }
+          if (!initialized && ctx) {
+            initialized = true;
+            const bufferSize = ctx.sampleRate * 2;
+            const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+              output[i] = Math.random() * 2 - 1;
+            }
+            const whiteNoise = ctx.createBufferSource();
+            whiteNoise.buffer = noiseBuffer;
+            whiteNoise.loop = true;
+
+            jetFilter = ctx.createBiquadFilter();
+            jetFilter.type = 'bandpass';
+            jetFilter.frequency.value = 1480;
+            jetFilter.Q.value = 1.65;
+
+            jetGain = ctx.createGain();
+            jetGain.gain.value = 0.0;
+
+            whiteNoise.connect(jetFilter);
+            jetFilter.connect(jetGain);
+            jetGain.connect(ctx.destination);
+            whiteNoise.start(0);
+          }
+          return true;
+        }
+
+        function setJetStream(active, pressureRatio) {
+          if (!enabled || !ctx || !jetGain || !jetFilter) return;
+          const now = ctx.currentTime;
+          const targetGain = active ? (0.045 + 0.055 * pressureRatio) : 0.0;
+          const targetFreq = 1180 + 950 * pressureRatio;
+          jetGain.gain.setTargetAtTime(targetGain, now, 0.03);
+          jetFilter.frequency.setTargetAtTime(targetFreq, now, 0.04);
+        }
+
+        function playSplash(pitchScale, vol) {
+          if (!ensure()) return;
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          const baseF = (260 + Math.random() * 140) * (pitchScale || 1.0);
+          osc.frequency.setValueAtTime(baseF, now);
+          osc.frequency.exponentialRampToValueAtTime(baseF * 2.15, now + 0.09);
+          osc.frequency.exponentialRampToValueAtTime(115, now + 0.24);
+
+          gain.gain.setValueAtTime((vol || 0.08), now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.26);
+        }
+
+        function playStep(isSprint) {
+          if (!ensure()) return;
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(isSprint ? 150 : 120, now);
+          osc.frequency.exponentialRampToValueAtTime(55, now + 0.055);
+          gain.gain.setValueAtTime(isSprint ? 0.032 : 0.02, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.065);
+        }
+
+        function playBounce() {
+          if (!ensure()) return;
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(145, now);
+          osc.frequency.exponentialRampToValueAtTime(430, now + 0.16);
+          osc.frequency.exponentialRampToValueAtTime(215, now + 0.30);
+
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.33);
+        }
+
+        function playSlide() {
+          if (!ensure()) return;
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(540, now);
+          osc.frequency.exponentialRampToValueAtTime(210, now + 0.24);
+
+          gain.gain.setValueAtTime(0.08, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.26);
+        }
+
+        function playChime(isWin) {
+          if (!ensure()) return;
+          const notes = isWin ? [523.25, 659.25, 783.99, 1046.5] : [440, 392, 329.63];
+          notes.forEach((freq, i) => {
+            const now = ctx.currentTime + i * 0.085;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now);
+            gain.gain.setValueAtTime(0.09, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.37);
+          });
+        }
+
+        function toggle() {
+          enabled = !enabled;
+          if (!enabled && jetGain && ctx) {
+            jetGain.gain.setTargetAtTime(0.0, ctx.currentTime, 0.02);
+          }
+          return enabled;
+        }
+
+        return { ensure, setJetStream, playSplash, playStep, playBounce, playSlide, playChime, toggle };
+      })();
+
+      // =========================================================================
+      // 2. THREE.JS SCENE, PMREM STUDIO ENV, SKY DOME & OCEAN AT Y = 0.0
+      // =========================================================================
+      const canvasEl = document.getElementById('gl-canvas');
+      const isMobileDevice = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || ('ontouchstart' in window && window.innerWidth < 900);
+      const maxDpr = isMobileDevice ? 1.5 : 2.0;
+
+      const renderer = new THREE.WebGLRenderer({
+        canvas: canvasEl,
+        antialias: true,
+        powerPreference: 'high-performance'
+      });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.12;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x7be4ff, 0.0072);
+
+      const camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.12, 260);
+
+      // Procedural Frutiger-Aero Studio Sky Reflection Map via PMREMGenerator
+      const pmremGenerator = new THREE.PMREMGenerator(renderer);
+      pmremGenerator.compileEquirectangularShader();
+      (function buildAeroEnvironment() {
+        const envCanvas = document.createElement('canvas');
+        envCanvas.width = 256;
+        envCanvas.height = 128;
+        const ctx = envCanvas.getContext('2d');
+        const grad = ctx.createLinearGradient(0, 0, 0, 128);
+        grad.addColorStop(0.0, '#0284c7');
+        grad.addColorStop(0.32, '#38bdf8');
+        grad.addColorStop(0.52, '#e0f7ff');
+        grad.addColorStop(0.58, '#00d2c6');
+        grad.addColorStop(1.0, '#0369a1');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 256, 128);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+        ctx.beginPath();
+        ctx.arc(178, 28, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(28, 14, 70, 14);
+        ctx.fillRect(120, 44, 88, 10);
+
+        const tex = new THREE.CanvasTexture(envCanvas);
+        tex.mapping = THREE.EquirectangularReflectionMapping;
+        const envRT = pmremGenerator.fromEquirectangular(tex);
+        tex.dispose();
+        scene.environment = envRT.texture;
+      })();
+
+      // Bright Frutiger-Aero Daylight Lighting
+      const hemiLight = new THREE.HemisphereLight(0xe8fbff, 0x0ea5e9, 0.95);
+      hemiLight.position.set(0, 30, 0);
+      scene.add(hemiLight);
+
+      const sunLight = new THREE.DirectionalLight(0xfffbeb, 1.32);
+      sunLight.position.set(16, 28, 14);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.width = isMobileDevice ? 1024 : 2048;
+      sunLight.shadow.mapSize.height = isMobileDevice ? 1024 : 2048;
+      sunLight.shadow.camera.near = 2;
+      sunLight.shadow.camera.far = 75;
+      const dShadow = 22;
+      sunLight.shadow.camera.left = -dShadow;
+      sunLight.shadow.camera.right = dShadow;
+      sunLight.shadow.camera.top = dShadow;
+      sunLight.shadow.camera.bottom = -dShadow;
+      sunLight.shadow.bias = -0.0005;
+      scene.add(sunLight);
+
+      const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.55);
+      rimLight.position.set(-14, 10, -16);
+      scene.add(rimLight);
+
+      // Vibrant Azure-to-Cyan Sky Dome
+      const skyGeo = new THREE.SphereGeometry(185, 32, 20);
+      const skyMat = new THREE.ShaderMaterial({
+        side: THREE.BackSide,
+        depthWrite: false,
+        uniforms: {
+          uTopColor: { value: new THREE.Color('#0077e6') },
+          uMidColor: { value: new THREE.Color('#47d1ff') },
+          uHorizonColor: { value: new THREE.Color('#d8fbff') }
+        },
+        vertexShader: `
+          varying vec3 vWorldPos;
+          void main() {
+            vec4 wp = modelMatrix * vec4(position, 1.0);
+            vWorldPos = wp.xyz;
+            gl_Position = projectionMatrix * viewMatrix * wp;
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 uTopColor;
+          uniform vec3 uMidColor;
+          uniform vec3 uHorizonColor;
+          varying vec3 vWorldPos;
+          void main() {
+            float h = clamp(normalize(vWorldPos).y, 0.0, 1.0);
+            vec3 col = mix(uHorizonColor, uMidColor, smoothstep(0.0, 0.28, h));
+            col = mix(col, uTopColor, smoothstep(0.25, 0.88, h));
+            gl_FragColor = vec4(col, 1.0);
+          }
+        `
+      });
+      scene.add(new THREE.Mesh(skyGeo, skyMat));
+
+      // Animated GLSL Tropical Turquoise Ocean strictly at Y = 0.0
+      const oceanUniforms = {
+        uTime: { value: 0 },
+        uSunDir: { value: new THREE.Vector3(0.45, 0.82, 0.36).normalize() }
+      };
+      const oceanGeo = new THREE.PlaneGeometry(340, 340, 96, 96);
+      oceanGeo.rotateX(-Math.PI * 0.5);
+      const oceanMat = new THREE.ShaderMaterial({
+        uniforms: oceanUniforms,
+        vertexShader: `
+          uniform float uTime;
+          varying vec3 vWorldPos;
+          varying vec3 vNormal;
+          void main() {
+            vec3 pos = position;
+            float dist = length(pos.xz);
+            float swell1 = sin(pos.x * 0.28 + uTime * 1.65) * 0.065;
+            float swell2 = cos(pos.z * 0.24 + uTime * 1.35) * 0.065;
+            float ripple = sin((pos.x + pos.z) * 0.55 - uTime * 2.2) * 0.03;
+            float damp = smoothstep(8.0, 16.0, dist) * 0.72 + 0.28;
+            pos.y += (swell1 + swell2 + ripple) * damp;
+
+            float dx = (cos(pos.x * 0.28 + uTime * 1.65) * 0.28 * 0.065 + cos((pos.x + pos.z) * 0.55 - uTime * 2.2) * 0.55 * 0.03) * damp;
+            float dz = (-sin(pos.z * 0.24 + uTime * 1.35) * 0.24 * 0.065 + cos((pos.x + pos.z) * 0.55 - uTime * 2.2) * 0.55 * 0.03) * damp;
+            vNormal = normalize(vec3(-dx, 1.0, -dz));
+            vec4 wp = modelMatrix * vec4(pos, 1.0);
+            vWorldPos = wp.xyz;
+            gl_Position = projectionMatrix * viewMatrix * wp;
+          }
+        `,
+        fragmentShader: `
+          uniform float uTime;
+          uniform vec3 uSunDir;
+          varying vec3 vWorldPos;
+          varying vec3 vNormal;
+
+          float causticPattern(vec2 uv, float t) {
+            vec2 p = uv * 0.38;
+            float a = sin(p.x * 1.7 + t * 1.3 + sin(p.y * 1.5 - t * 1.1));
+            float b = sin(p.y * 1.8 - t * 1.2 + cos(p.x * 1.4 + t * 1.5));
+            return pow(clamp(1.0 - abs(a + b) * 0.68, 0.0, 1.0), 3.4);
+          }
+
+          float sdBox2D(vec2 p, vec2 b) {
+            vec2 d = abs(p) - b;
+            return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+          }
+
+          void main() {
+            vec3 N = normalize(vNormal);
+            vec3 V = normalize(cameraPosition - vWorldPos);
+            float fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.2);
+
+            float c1 = causticPattern(vWorldPos.xz, uTime);
+            float c2 = causticPattern(vWorldPos.xz * 1.35 + vec2(3.1, -1.7), -uTime * 0.85);
+            float caustics = (c1 + c2) * 0.5;
+
+            vec3 deepAqua = vec3(0.0, 0.52, 0.82);
+            vec3 shallowTurquoise = vec3(0.02, 0.84, 0.86);
+            float distFromArena = length(vWorldPos.xz);
+            float shallowMask = 1.0 - smoothstep(8.0, 42.0, distFromArena);
+
+            vec3 waterCol = mix(deepAqua, shallowTurquoise, shallowMask * 0.74);
+            waterCol += vec3(0.55, 0.98, 1.0) * caustics * (0.28 + shallowMask * 0.25);
+
+            vec3 skyRefl = vec3(0.68, 0.94, 1.0);
+            waterCol = mix(waterCol, skyRefl, fresnel * 0.56);
+
+            vec3 H = normalize(uSunDir + V);
+            float spec = pow(max(dot(N, H), 0.0), 96.0);
+            waterCol += vec3(1.0, 1.0, 0.96) * spec * 0.95;
+
+            // Crisp aerated shoreline foam hugging the inflatable playground perimeter & catwalks
+            float dMain = sdBox2D(vWorldPos.xz, vec2(8.5, 7.5));
+            float dWestCat = sdBox2D(vWorldPos.xz - vec2(-10.4, 0.0), vec2(1.9, 1.7));
+            float dEastCat = sdBox2D(vWorldPos.xz - vec2(10.4, 0.0), vec2(1.9, 1.7));
+            float dShore = min(dMain, min(dWestCat, dEastCat));
+            float foamWave = sin(vWorldPos.x * 1.8 + uTime * 2.6) * cos(vWorldPos.z * 1.8 - uTime * 2.1) * 0.18;
+            float foam = smoothstep(0.62, 0.02, abs(dShore) + foamWave);
+            waterCol = mix(waterCol, vec3(0.96, 0.995, 1.0), foam * 0.82);
+
+            float fogF = smoothstep(45.0, 155.0, distFromArena);
+            waterCol = mix(waterCol, vec3(0.75, 0.96, 1.0), fogF);
+
+            gl_FragColor = vec4(waterCol, 1.0);
+          }
+        `
+      });
+      const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
+      oceanMesh.position.y = 0.0;
+      scene.add(oceanMesh);
+
+      // =========================================================================
+      // 3. FRUTIGER-AERO SCENERY (ISLANDS, SWAYING PALMS, CLOUDS, BUBBLES, GULLS, FISH)
+      // =========================================================================
+      const sceneryGroup = new THREE.Group();
+      scene.add(sceneryGroup);
+
+      const palmCanopies = [];
+      const palmTrunkMat = new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.72 });
+      const palmLeafMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.36, side: THREE.DoubleSide });
+
+      const islandConfigs = [
+        { x: -46, z: -52, r: 13, h: 7.5 },
+        { x: 54, z: -44, r: 15, h: 9.0 },
+        { x: -58, z: 38, r: 12, h: 6.5 },
+        { x: 48, z: 54, r: 14, h: 8.2 }
+      ];
+      islandConfigs.forEach((isl, idx) => {
+        const g = new THREE.Group();
+        g.position.set(isl.x, 0.0, isl.z);
+        const beach = new THREE.Mesh(
+          new THREE.CylinderGeometry(isl.r * 0.85, isl.r * 1.15, 0.8, 20),
+          new THREE.MeshStandardMaterial({ color: 0xfde68a, roughness: 0.65 })
+        );
+        beach.position.y = 0.25;
+        const hill = new THREE.Mesh(
+          new THREE.SphereGeometry(isl.r * 0.78, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.5),
+          new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.45 })
+        );
+        hill.scale.set(1, isl.h / (isl.r * 0.78), 1);
+        hill.position.y = 0.45;
+        g.add(beach, hill);
+
+        // Swaying Tropical Palm Trees on each island
+        for (let p = 0; p < 2; p++) {
+          const pGroup = new THREE.Group();
+          const ang = idx * 1.4 + p * 2.5;
+          pGroup.position.set(Math.cos(ang) * (isl.r * 0.45), isl.h * 0.62, Math.sin(ang) * (isl.r * 0.45));
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.38, 4.2, 10), palmTrunkMat);
+          trunk.position.y = 2.0;
+          trunk.rotation.z = p === 0 ? 0.14 : -0.14;
+          pGroup.add(trunk);
+
+          const canopy = new THREE.Group();
+          canopy.position.set(p === 0 ? -0.28 : 0.28, 4.05, 0);
+          for (let f = 0; f < 5; f++) {
+            const frond = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.06, 2.4), palmLeafMat);
+            frond.position.z = 1.05;
+            frond.rotation.x = 0.34;
+            const holder = new THREE.Group();
+            holder.rotation.y = (f / 5) * Math.PI * 2;
+            holder.add(frond);
+            canopy.add(holder);
+          }
+          pGroup.add(canopy);
+          g.add(pGroup);
+          palmCanopies.push({ group: canopy, phase: idx + p * 1.7 });
+        }
+
+        sceneryGroup.add(g);
+      });
+
+      const cloudMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.35,
+        metalness: 0.02
+      });
+      const clouds = [];
+      for (let i = 0; i < 12; i++) {
+        const cg = new THREE.Group();
+        const puffs = 3 + (i % 3);
+        for (let p = 0; p < puffs; p++) {
+          const puff = new THREE.Mesh(new THREE.SphereGeometry(2.1 - Math.abs(p - 1) * 0.45, 14, 12), cloudMat);
+          puff.position.set((p - (puffs - 1) * 0.5) * 2.0, (p % 2) * 0.45, ((p * 3) % 2 - 0.5) * 0.9);
+          puff.scale.set(1.25, 0.78, 0.95);
+          cg.add(puff);
+        }
+        const ang = (i / 12) * Math.PI * 2;
+        const dist = 38 + (i % 4) * 16;
+        cg.position.set(Math.cos(ang) * dist, 16 + (i % 3) * 4.5, Math.sin(ang) * dist);
+        sceneryGroup.add(cg);
+        clouds.push({ group: cg, speed: 0.35 + (i % 3) * 0.14 });
+      }
+
+      const bubbleGeo = new THREE.SphereGeometry(1, 16, 14);
+      const bubbleMat = new THREE.MeshPhysicalMaterial({
+        color: 0xbef4ff,
+        roughness: 0.04,
+        metalness: 0.05,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.02,
+        transparent: true,
+        opacity: 0.34,
+        depthWrite: false
+      });
+      const aeroBubbles = [];
+      for (let i = 0; i < 24; i++) {
+        const b = new THREE.Mesh(bubbleGeo, bubbleMat);
+        const r = 0.18 + (i % 4) * 0.11;
+        b.scale.setScalar(r);
+        const ang = (i / 24) * Math.PI * 2;
+        const rad = 5.5 + (i % 5) * 2.4;
+        b.position.set(Math.cos(ang) * rad, 1.2 + (i % 6) * 0.95, Math.sin(ang) * rad);
+        scene.add(b);
+        aeroBubbles.push({
+          mesh: b,
+          baseR: r,
+          baseX: b.position.x,
+          baseZ: b.position.z,
+          phase: i * 0.9,
+          speed: 0.45 + (i % 4) * 0.12
+        });
+      }
+
+      // 2-Segment Articulated Seagulls
+      const seagulls = [];
+      const gullMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, side: THREE.DoubleSide });
+      const gullTipMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4, side: THREE.DoubleSide });
+      for (let i = 0; i < 6; i++) {
+        const gg = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.42, 8), gullMat);
+        body.rotation.x = Math.PI * 0.5;
+        gg.add(body);
+
+        const innerGeo = new THREE.BoxGeometry(0.38, 0.028, 0.20);
+        innerGeo.translate(0.19, 0, 0);
+        const outerGeo = new THREE.BoxGeometry(0.34, 0.022, 0.14);
+        outerGeo.translate(0.17, 0, 0);
+
+        const leftInner = new THREE.Mesh(innerGeo, gullMat);
+        const leftOuter = new THREE.Mesh(outerGeo, gullTipMat);
+        leftOuter.position.x = 0.37;
+        leftInner.add(leftOuter);
+
+        const rightInner = new THREE.Mesh(innerGeo, gullMat);
+        rightInner.scale.x = -1;
+        const rightOuter = new THREE.Mesh(outerGeo, gullTipMat);
+        rightOuter.position.x = 0.37;
+        rightInner.add(rightOuter);
+
+        gg.add(leftInner, rightInner);
+        scene.add(gg);
+        seagulls.push({
+          group: gg,
+          leftInner,
+          leftOuter,
+          rightInner,
+          rightOuter,
+          orbitR: 15 + i * 3.5,
+          height: 8.5 + (i % 3) * 2.4,
+          angle: i * 1.05,
+          speed: 0.28 + (i % 2) * 0.08
+        });
+      }
+
+      // Leaping Turquoise Lagoon Fish
+      const lagoonFish = [];
+      const fishBodyMat = new THREE.MeshPhysicalMaterial({ color: 0x38bdf8, roughness: 0.15, clearcoat: 1.0 });
+      const fishFinMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3 });
+      for (let i = 0; i < 4; i++) {
+        const fg = new THREE.Group();
+        const fBody = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), fishBodyMat);
+        fBody.scale.set(0.65, 0.85, 1.8);
+        const fTail = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.26, 6), fishFinMat);
+        fTail.rotation.x = Math.PI * 0.5;
+        fTail.position.z = -0.34;
+        fg.add(fBody, fTail);
+        fg.visible = false;
+        scene.add(fg);
+        lagoonFish.push({
+          group: fg,
+          tail: fTail,
+          timer: 1.5 + i * 2.3,
+          active: false,
+          progress: 0,
+          startX: 0,
+          startZ: 0,
+          dirX: 1,
+          dirZ: 0
+        });
+      }
+
+      // =========================================================================
+      // 4. AIR-FILLED INFLATABLE WATER PLAYGROUND (ELEVATED ABOVE Y = 0 OCEAN)
+      // =========================================================================
+      const DECK_Y = 0.55; // Main walkable playground surface height above ocean (Y = 0.0)
+      const arenaGroup = new THREE.Group();
+      scene.add(arenaGroup);
+
+      function makeVinylMat(hex, emissiveHex) {
+        return new THREE.MeshPhysicalMaterial({
+          color: new THREE.Color(hex),
+          emissive: emissiveHex ? new THREE.Color(emissiveHex) : new THREE.Color(0x000000),
+          emissiveIntensity: emissiveHex ? 0.14 : 0.0,
+          roughness: 0.16,
+          metalness: 0.02,
+          clearcoat: 0.95,
+          clearcoatRoughness: 0.08,
+          reflectivity: 0.95
+        });
+      }
+
+      const vinylWhite = makeVinylMat('#f8fafc');
+      const vinylAqua = makeVinylMat('#00b4ff');
+      const vinylTeal = makeVinylMat('#00d9b8');
+      const vinylLime = makeVinylMat('#4ade80');
+      const vinylYellow = makeVinylMat('#facc15');
+      const vinylCoral = makeVinylMat('#ff5c8a');
+
+      const arenaColliders = [];
+      const trampolinePads = [];
+
+      function addBoxObstacle(x, yCenter, z, w, h, d, mat, addSeams) {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+        mesh.position.set(x, yCenter, z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        arenaGroup.add(mesh);
+
+        if (addSeams !== false) {
+          const seamR = 0.05;
+          const frontSeam = new THREE.Mesh(new THREE.CylinderGeometry(seamR, seamR, w, 10), vinylWhite);
+          frontSeam.rotation.z = Math.PI * 0.5;
+          frontSeam.position.set(x, yCenter + h * 0.5, z + d * 0.5);
+          const backSeam = frontSeam.clone();
+          backSeam.position.z = z - d * 0.5;
+          arenaGroup.add(frontSeam, backSeam);
+        }
+
+        arenaColliders.push({
+          type: 'box',
+          minX: x - w * 0.5,
+          maxX: x + w * 0.5,
+          minY: yCenter - h * 0.5,
+          maxY: yCenter + h * 0.5,
+          minZ: z - d * 0.5,
+          maxZ: z + d * 0.5
+        });
+        return mesh;
+      }
+
+      function addRampObstacle(x, y0, y1, z, w, d, mat) {
+        const minX = x - w * 0.5;
+        const maxX = x + w * 0.5;
+        const minZ = z - d * 0.5;
+        const maxZ = z + d * 0.5;
+
+        const shape = new THREE.Shape();
+        if (y1 >= y0) {
+          shape.moveTo(0, 0);
+          shape.lineTo(w, 0);
+          shape.lineTo(w, y1 - y0);
+        } else {
+          shape.moveTo(0, 0);
+          shape.lineTo(w, 0);
+          shape.lineTo(0, y0 - y1);
+        }
+        shape.closePath();
+
+        const baseY = Math.min(y0, y1);
+        const extrudeGeo = new THREE.ExtrudeGeometry(shape, {
+          depth: d,
+          bevelEnabled: false
+        });
+        extrudeGeo.translate(-w * 0.5, baseY, -d * 0.5);
+        const mesh = new THREE.Mesh(extrudeGeo, mat);
+        mesh.position.set(x, 0, z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        arenaGroup.add(mesh);
+
+        arenaColliders.push({
+          type: 'ramp',
+          minX,
+          maxX,
+          minZ,
+          maxZ,
+          y0,
+          y1
+        });
+        return mesh;
+      }
+
+      function addCylinderPillar(x, baseY, z, r, h, mat) {
+        const yCenter = baseY + h * 0.5;
+        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.03, h, 24), mat);
+        mesh.position.set(x, yCenter, z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+
+        const cap = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), vinylWhite);
+        cap.scale.set(1, 0.32, 1);
+        cap.position.y = h * 0.5;
+        mesh.add(cap);
+
+        const stripe = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.02, r * 1.02, 0.22, 24), vinylYellow);
+        stripe.position.y = -h * 0.32;
+        mesh.add(stripe);
+
+        arenaGroup.add(mesh);
+        arenaColliders.push({
+          type: 'cylinder',
+          x,
+          z,
+          r,
+          minY: baseY,
+          maxY: baseY + h + r * 0.32
+        });
+        return mesh;
+      }
+
+      // Main Floating Inflatable Playground Deck (17.0m x 15.0m, walkable top at DECK_Y = 0.55)
+      addBoxObstacle(0, DECK_Y - 0.30, 0, 17.0, 0.60, 15.0, vinylWhite, true);
+
+      // Flank Catwalk Pontoons extending over the ocean (West & East)
+      addBoxObstacle(-10.4, DECK_Y - 0.30, 0, 3.8, 0.60, 3.4, vinylTeal, true);
+      addBoxObstacle(10.4, DECK_Y - 0.30, 0, 3.8, 0.60, 3.4, vinylTeal, true);
+
+      // Colorful Aqua & Teal Deck Racing Stripes (visual only)
+      const deckStripA = new THREE.Mesh(new THREE.BoxGeometry(16.2, 0.015, 4.8), vinylAqua);
+      deckStripA.position.set(0, DECK_Y + 0.008, 0);
+      deckStripA.receiveShadow = true;
+      const deckStripB = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.015, 14.2), vinylTeal);
+      deckStripB.position.set(0, DECK_Y + 0.006, 0);
+      deckStripB.receiveShadow = true;
+      arenaGroup.add(deckStripA, deckStripB);
+
+      // Decorative Air-Filled Pontoons along deck waterlines
+      const sideTrimN = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 17.0, 16), vinylAqua);
+      sideTrimN.rotation.z = Math.PI * 0.5;
+      sideTrimN.position.set(0, 0.24, -7.52);
+      const sideTrimS = sideTrimN.clone();
+      sideTrimS.position.z = 7.52;
+      arenaGroup.add(sideTrimN, sideTrimS);
+
+      // CENTRAL SKY-BRIDGE & LOW SLIDE-UNDER INFLATABLE ARCHWAY
+      const BRIDGE_TOP = 2.08;
+      const BRIDGE_BOT = 1.72;
+      addBoxObstacle(0, (BRIDGE_TOP + BRIDGE_BOT) * 0.5, 0, 3.2, BRIDGE_TOP - BRIDGE_BOT, 3.4, vinylYellow, true);
+
+      const colH = BRIDGE_BOT - DECK_Y;
+      addBoxObstacle(-1.38, DECK_Y + colH * 0.5, 0, 0.44, colH, 3.4, vinylAqua, false);
+      addBoxObstacle(1.38, DECK_Y + colH * 0.5, 0, 0.44, colH, 3.4, vinylAqua, false);
+
+      const archCrown = new THREE.Mesh(
+        new THREE.TorusGeometry(1.55, 0.16, 12, 28, Math.PI),
+        vinylCoral
+      );
+      archCrown.position.set(0, BRIDGE_TOP, 0);
+      arenaGroup.add(archCrown);
+
+      // West & East Inflatable Ramps leading smoothly from DECK_Y (0.55) up to BRIDGE_TOP (2.08)
+      addRampObstacle(-3.1, DECK_Y, BRIDGE_TOP, 0, 3.0, 2.6, vinylLime);
+      addRampObstacle(3.1, BRIDGE_TOP, DECK_Y, 0, 3.0, 2.6, vinylLime);
+
+      // 4 Tall Inflatable Cylindrical Cover Pillars
+      addCylinderPillar(-5.0, DECK_Y, -3.8, 0.68, 2.2, vinylAqua);
+      addCylinderPillar(5.0, DECK_Y, -3.8, 0.68, 2.2, vinylCoral);
+      addCylinderPillar(-5.0, DECK_Y, 3.8, 0.68, 2.2, vinylCoral);
+      addCylinderPillar(5.0, DECK_Y, 3.8, 0.68, 2.2, vinylAqua);
+
+      // 2 Inflatable Low Cover Walls (North & South)
+      addBoxObstacle(-3.0, DECK_Y + 0.50, -5.0, 2.2, 1.0, 0.52, vinylTeal, true);
+      addBoxObstacle(3.0, DECK_Y + 0.50, 5.0, 2.2, 1.0, 0.52, vinylTeal, true);
+
+      // 2 Bouncy Inflatable Trampoline Pads (North & South Flanks)
+      function addTrampoline(x, z) {
+        const padGroup = new THREE.Group();
+        padGroup.position.set(x, DECK_Y, z);
+        const outerRing = new THREE.Mesh(new THREE.TorusGeometry(1.12, 0.20, 14, 28), vinylCoral);
+        outerRing.rotation.x = Math.PI * 0.5;
+        outerRing.position.y = 0.14;
+        const bounceDisc = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.20, 24), vinylYellow);
+        bounceDisc.position.y = 0.10;
+        const starInner = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.22, 20), vinylWhite);
+        starInner.position.y = 0.105;
+        padGroup.add(outerRing, bounceDisc, starInner);
+        arenaGroup.add(padGroup);
+
+        trampolinePads.push({ x, z, r: 1.22, mesh: padGroup, squish: 0, squishVel: 0 });
+      }
+      addTrampoline(0, -4.9);
+      addTrampoline(0, 4.9);
+
+      // =========================================================================
+      // 4B. SAFE FLOATING WATER PLATFORMS (LILY PADS & INFLATABLE RAFTS AROUND PLAYGROUND)
+      // =========================================================================
+      const waterFloats = [];
+      const lilyGreenMat = makeVinylMat('#22c55e');
+      const lilyRimMat = makeVinylMat('#86efac');
+      const flowerPinkMat = makeVinylMat('#fb7185');
+
+      function addLilyPadFloat(x, z, radius) {
+        const g = new THREE.Group();
+        const baseY = 0.24;
+        g.position.set(x, baseY, z);
+
+        const padDisc = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.94, 0.16, 26), lilyGreenMat);
+        padDisc.position.y = -0.08;
+        padDisc.receiveShadow = true;
+        padDisc.castShadow = true;
+
+        const rimTorus = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.96, 0.075, 10, 28), lilyRimMat);
+        rimTorus.rotation.x = Math.PI * 0.5;
+        rimTorus.position.y = -0.02;
+
+        // Decorative water-lily flower on the edge
+        const flowerGroup = new THREE.Group();
+        flowerGroup.position.set(radius * 0.62, 0.03, -radius * 0.42);
+        for (let p = 0; p < 6; p++) {
+          const petal = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), flowerPinkMat);
+          petal.scale.set(1.4, 0.45, 0.7);
+          const a = (p / 6) * Math.PI * 2;
+          petal.position.set(Math.cos(a) * 0.11, 0, Math.sin(a) * 0.11);
+          petal.rotation.y = -a;
+          flowerGroup.add(petal);
+        }
+        const bud = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), vinylYellow);
+        bud.position.y = 0.03;
+        flowerGroup.add(bud);
+
+        g.add(padDisc, rimTorus, flowerGroup);
+        arenaGroup.add(g);
+
+        waterFloats.push({
+          shape: 'circle',
+          mesh: g,
+          x,
+          z,
+          r: radius,
+          baseY,
+          bobOffset: 0,
+          dip: 0,
+          dipVel: 0,
+          tiltX: 0,
+          tiltZ: 0,
+          phase: Math.random() * Math.PI * 2
+        });
+      }
+
+      function addAeroRaftFloat(x, z, w, d, colorMat) {
+        const g = new THREE.Group();
+        const baseY = 0.26;
+        g.position.set(x, baseY, z);
+
+        const deck = new THREE.Mesh(new THREE.BoxGeometry(w, 0.18, d), vinylWhite);
+        deck.position.y = -0.09;
+        deck.receiveShadow = true;
+        deck.castShadow = true;
+
+        const trimTop = new THREE.Mesh(new THREE.BoxGeometry(w + 0.16, 0.12, 0.22), colorMat);
+        trimTop.position.set(0, -0.06, d * 0.5);
+        const trimBot = trimTop.clone();
+        trimBot.position.z = -d * 0.5;
+        const trimLeft = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, d + 0.16), colorMat);
+        trimLeft.position.set(-w * 0.5, -0.06, 0);
+        const trimRight = trimLeft.clone();
+        trimRight.position.x = w * 0.5;
+
+        g.add(deck, trimTop, trimBot, trimLeft, trimRight);
+        arenaGroup.add(g);
+
+        waterFloats.push({
+          shape: 'rect',
+          mesh: g,
+          x,
+          z,
+          hw: w * 0.5,
+          hd: d * 0.5,
+          baseY,
+          bobOffset: 0,
+          dip: 0,
+          dipVel: 0,
+          tiltX: 0,
+          tiltZ: 0,
+          phase: Math.random() * Math.PI * 2
+        });
+      }
+
+      // Place safe floating lily pads & inflatable rafts around the water perimeter
+      addLilyPadFloat(-5.4, 9.5, 1.42);
+      addAeroRaftFloat(0.0, 10.1, 2.7, 2.0, vinylAqua);
+      addLilyPadFloat(5.4, 9.5, 1.42);
+
+      addLilyPadFloat(-5.4, -9.5, 1.42);
+      addAeroRaftFloat(0.0, -10.1, 2.7, 2.0, vinylCoral);
+      addLilyPadFloat(5.4, -9.5, 1.42);
+
+      addLilyPadFloat(-10.4, 3.8, 1.38);
+      addLilyPadFloat(10.4, -3.8, 1.38);
+
+      // Helper to check if a point (x, z) is safely above an inflatable deck/catwalk or water float
+      function isPointOverDeck(x, z, margin) {
+        const m = margin || 0;
+        const onMain = Math.abs(x) <= (8.5 - m) && Math.abs(z) <= (7.5 - m);
+        const onWestCat = x >= (-12.3 + m) && x <= (-8.5 + m) && Math.abs(z) <= (1.7 - m);
+        const onEastCat = x >= (8.5 - m) && x <= (12.3 - m) && Math.abs(z) <= (1.7 - m);
+        if (onMain || onWestCat || onEastCat) return true;
+
+        for (let i = 0; i < waterFloats.length; i++) {
+          const wf = waterFloats[i];
+          if (wf.shape === 'circle') {
+            if (Math.hypot(x - wf.x, z - wf.z) <= wf.r - m * 0.5) return true;
+          } else {
+            if (Math.abs(x - wf.x) <= wf.hw - m * 0.5 && Math.abs(z - wf.z) <= wf.hd - m * 0.5) return true;
+          }
+        }
+        return false;
+      }
+
+      // =========================================================================
+      // 5. FLOATING OCEAN RING BUOYS & GIANT PUSHABLE BEACH BALLS
+      // =========================================================================
+      const dynamicInflatables = [];
+
+      function createBeachBall(x, y, z, radius, onOcean) {
+        const g = new THREE.Group();
+        g.position.set(x, y, z);
+
+        const panelColors = [0xffffff, 0x00b4ff, 0xffffff, 0xfacc15, 0xffffff, 0xff3b7f];
+        for (let s = 0; s < 6; s++) {
+          const wedgeGeo = new THREE.SphereGeometry(
+            radius,
+            10,
+            16,
+            (s / 6) * Math.PI * 2,
+            (1 / 6) * Math.PI * 2
+          );
+          const wedgeMat = makeVinylMat('#' + panelColors[s].toString(16).padStart(6, '0'));
+          const wedge = new THREE.Mesh(wedgeGeo, wedgeMat);
+          wedge.castShadow = !onOcean;
+          g.add(wedge);
+        }
+        const capTop = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.16, 14), vinylAqua);
+        capTop.rotation.x = -Math.PI * 0.5;
+        capTop.position.y = radius * 0.995;
+        g.add(capTop);
+
+        scene.add(g);
+        dynamicInflatables.push({
+          type: 'ball',
+          mesh: g,
+          x, y, z,
+          vx: 0, vy: 0, vz: 0,
+          wx: 0, wy: 0.4, wz: 0,
+          r: radius,
+          onOcean: !!onOcean,
+          phase: Math.random() * 6.28
+        });
+      }
+
+      function createOceanRingBuoy(x, z, colorHex) {
+        const g = new THREE.Group();
+        g.position.set(x, 0.08, z);
+        const torus = new THREE.Mesh(new THREE.TorusGeometry(0.88, 0.28, 14, 28), makeVinylMat(colorHex));
+        torus.rotation.x = Math.PI * 0.5;
+        g.add(torus);
+
+        for (let b = 0; b < 4; b++) {
+          const band = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.04, 8, 16), vinylWhite);
+          const ang = (b / 4) * Math.PI * 2;
+          band.position.set(Math.cos(ang) * 0.88, 0, Math.sin(ang) * 0.88);
+          band.rotation.y = -ang;
+          g.add(band);
+        }
+
+        scene.add(g);
+        dynamicInflatables.push({
+          type: 'ring',
+          mesh: g,
+          x, y: 0.08, z,
+          vx: 0, vy: 0, vz: 0,
+          wx: 0, wy: 0.25, wz: 0,
+          r: 1.15,
+          onOcean: true,
+          phase: Math.random() * 6.28
+        });
+      }
+
+      createBeachBall(-2.5, DECK_Y + 0.54, 2.5, 0.54, false);
+      createBeachBall(2.5, DECK_Y + 0.54, -2.5, 0.54, false);
+      createBeachBall(-11.4, 0.42, -5.6, 0.78, true);
+      createBeachBall(11.4, 0.42, 5.6, 0.78, true);
+      createOceanRingBuoy(-10.8, 6.8, '#ff5c8a');
+      createOceanRingBuoy(10.8, -6.8, '#facc15');
+      createOceanRingBuoy(3.2, -11.4, '#00b4ff');
+
+      // =========================================================================
+      // 6. HYDROMESH FLUID ENGINE (ZERO-ALLOCATION SoA PBF/SPH + SURFACE NETS)
+      // =========================================================================
+      const MAX_FLUID_PARTICLES = 1600;
+      const MAX_NEIGHBORS = 32;
+      const HASH_SIZE = 16384;
+      const HASH_MASK = HASH_SIZE - 1;
+
+      const TEAM_PLAYER = 1;
+      const TEAM_BOT = 2;
+
+      const px = new Float32Array(MAX_FLUID_PARTICLES);
+      const py = new Float32Array(MAX_FLUID_PARTICLES);
+      const pz = new Float32Array(MAX_FLUID_PARTICLES);
+
+      const oldX = new Float32Array(MAX_FLUID_PARTICLES);
+      const oldY = new Float32Array(MAX_FLUID_PARTICLES);
+      const oldZ = new Float32Array(MAX_FLUID_PARTICLES);
+
+      const vx = new Float32Array(MAX_FLUID_PARTICLES);
+      const vy = new Float32Array(MAX_FLUID_PARTICLES);
+      const vz = new Float32Array(MAX_FLUID_PARTICLES);
+
+      const lambda = new Float32Array(MAX_FLUID_PARTICLES);
+      const deltaX = new Float32Array(MAX_FLUID_PARTICLES);
+      const deltaY = new Float32Array(MAX_FLUID_PARTICLES);
+      const deltaZ = new Float32Array(MAX_FLUID_PARTICLES);
+
+      const owner = new Uint8Array(MAX_FLUID_PARTICLES);
+      const life = new Float32Array(MAX_FLUID_PARTICLES);
+
+      const head = new Int32Array(HASH_SIZE);
+      const next = new Int32Array(MAX_FLUID_PARTICLES);
+      const nIdx = new Int32Array(MAX_FLUID_PARTICLES * MAX_NEIGHBORS);
+      const nDist = new Float32Array(MAX_FLUID_PARTICLES * MAX_NEIGHBORS);
+      const nCount = new Uint8Array(MAX_FLUID_PARTICLES);
+
+      let activeFluidCount = 0;
+
+      const SPH_H = 0.34;
+      const SPH_H2 = SPH_H * SPH_H;
+      const SPH_INV_CELL = 1.0 / SPH_H;
+      const SPH_POLY6 = 315.0 / (64.0 * Math.PI * Math.pow(SPH_H, 9));
+      const SPH_SPIKY_GRAD = -45.0 / (Math.PI * Math.pow(SPH_H, 6));
+      const SPH_REST_DENSITY = 28.0;
+      const SPH_INV_REST = 1.0 / SPH_REST_DENSITY;
+      const DQ_DIFF = SPH_H2 - (0.22 * SPH_H) * (0.22 * SPH_H);
+      const SPH_INV_CORR_DENOM = 1.0 / Math.max(1e-6, SPH_POLY6 * DQ_DIFF * DQ_DIFF * DQ_DIFF);
+
+      function hashCoords(ix, iy, iz) {
+        return ((ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791)) & HASH_MASK;
+      }
+
+      const splashRings = [];
+      const splashRingGeo = new THREE.RingGeometry(0.14, 0.28, 24);
+      splashRingGeo.rotateX(-Math.PI * 0.5);
+      const splashRingMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.84,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+
+      function spawnOceanSplashRing(x, z, scaleInit) {
+        if (splashRings.length > 32) return;
+        const m = new THREE.Mesh(splashRingGeo, splashRingMat.clone());
+        m.position.set(x, 0.03, z);
+        if (scaleInit) m.scale.set(scaleInit, 1, scaleInit);
+        scene.add(m);
+        splashRings.push({ mesh: m, age: 0, baseScale: scaleInit || 1.0 });
+      }
+
+      function spawnWaterParticle(team, x, y, z, velX, velY, velZ, maxLife) {
+        let idx = activeFluidCount;
+        if (idx >= MAX_FLUID_PARTICLES) {
+          idx = Math.floor(Math.random() * MAX_FLUID_PARTICLES);
+        } else {
+          activeFluidCount++;
+        }
+        px[idx] = x;
+        py[idx] = y;
+        pz[idx] = z;
+        oldX[idx] = x;
+        oldY[idx] = y;
+        oldZ[idx] = z;
+        vx[idx] = velX;
+        vy[idx] = velY;
+        vz[idx] = velZ;
+        owner[idx] = team;
+        life[idx] = maxLife || 1.35;
+      }
+
+      function removeFluidParticle(i) {
+        const last = activeFluidCount - 1;
+        if (i !== last) {
+          px[i] = px[last];
+          py[i] = py[last];
+          pz[i] = pz[last];
+          oldX[i] = oldX[last];
+          oldY[i] = oldY[last];
+          oldZ[i] = oldZ[last];
+          vx[i] = vx[last];
+          vy[i] = vy[last];
+          vz[i] = vz[last];
+          owner[i] = owner[last];
+          life[i] = life[last];
+        }
+        activeFluidCount--;
+      }
+
+      function collideParticleWithArena(i) {
+        let x = px[i], y = py[i], z = pz[i];
+        let vxi = vx[i], vyi = vy[i], vzi = vz[i];
+        const r = 0.06;
+
+        for (let c = 0; c < arenaColliders.length; c++) {
+          const col = arenaColliders[c];
+          if (col.type === 'box') {
+            if (x > col.minX - r && x < col.maxX + r &&
+                y > col.minY - r && y < col.maxY + r &&
+                z > col.minZ - r && z < col.maxZ + r) {
+              const penTop = (col.maxY + r) - y;
+              const penBot = y - (col.minY - r);
+              const penLeft = x - (col.minX - r);
+              const penRight = (col.maxX + r) - x;
+              const penFront = (col.maxZ + r) - z;
+              const penBack = z - (col.minZ - r);
+
+              const minPen = Math.min(penTop, penBot, penLeft, penRight, penFront, penBack);
+              if (minPen === penTop) {
+                y = col.maxY + r;
+                if (vyi < 0) vyi = -vyi * 0.25;
+                vxi *= 0.86;
+                vzi *= 0.86;
+              } else if (minPen === penBot) {
+                y = col.minY - r;
+                if (vyi > 0) vyi = -vyi * 0.3;
+              } else if (minPen === penLeft) {
+                x = col.minX - r;
+                if (vxi > 0) vxi = -vxi * 0.35;
+              } else if (minPen === penRight) {
+                x = col.maxX + r;
+                if (vxi < 0) vxi = -vxi * 0.35;
+              } else if (minPen === penFront) {
+                z = col.maxZ + r;
+                if (vzi < 0) vzi = -vzi * 0.35;
+              } else {
+                z = col.minZ - r;
+                if (vzi > 0) vzi = -vzi * 0.35;
+              }
+            }
+          } else if (col.type === 'ramp') {
+            if (x >= col.minX && x <= col.maxX && z >= col.minZ && z <= col.maxZ) {
+              const t = (x - col.minX) / Math.max(0.01, col.maxX - col.minX);
+              const rampY = col.y0 + t * (col.y1 - col.y0);
+              const minRY = Math.min(col.y0, col.y1);
+              if (y < rampY + r && y > minRY - 0.3) {
+                y = rampY + r;
+                if (vyi < 0) vyi = -vyi * 0.2;
+                vxi *= 0.88;
+                vzi *= 0.88;
+              }
+            }
+          } else if (col.type === 'cylinder') {
+            if (y >= col.minY && y <= col.maxY) {
+              const dx = x - col.x;
+              const dz = z - col.z;
+              const d2 = dx * dx + dz * dz;
+              const minD = col.r + r;
+              if (d2 < minD * minD && d2 > 1e-6) {
+                const d = Math.sqrt(d2);
+                const nx = dx / d;
+                const nz = dz / d;
+                x = col.x + nx * minD;
+                z = col.z + nz * minD;
+                const vn = vxi * nx + vzi * nz;
+                if (vn < 0) {
+                  vxi -= 1.38 * vn * nx;
+                  vzi -= 1.38 * vn * nz;
+                }
+              }
+            }
+          }
+        }
+
+        // Collide water particles with safe floating lily pads & rafts
+        for (let f = 0; f < waterFloats.length; f++) {
+          const wf = waterFloats[f];
+          const topY = wf.baseY + wf.bobOffset - wf.dip;
+          if (y < topY + r && y > topY - 0.22) {
+            const onFloat = wf.shape === 'circle'
+              ? (Math.hypot(x - wf.x, z - wf.z) <= wf.r + r)
+              : (Math.abs(x - wf.x) <= wf.hw + r && Math.abs(z - wf.z) <= wf.hd + r);
+            if (onFloat) {
+              y = topY + r;
+              if (vyi < 0) vyi = -vyi * 0.22;
+              vxi *= 0.85;
+              vzi *= 0.85;
+            }
+          }
+        }
+
+        // Collide & push giant beach balls & buoys
+        for (let b = 0; b < dynamicInflatables.length; b++) {
+          const obj = dynamicInflatables[b];
+          const dx = x - obj.x;
+          const dy = y - obj.y;
+          const dz = z - obj.z;
+          const minD = obj.r + r;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 < minD * minD && d2 > 1e-6) {
+            const d = Math.sqrt(d2);
+            const nx = dx / d;
+            const ny = dy / d;
+            const nz = dz / d;
+            x = obj.x + nx * minD;
+            y = obj.y + ny * minD;
+            z = obj.z + nz * minD;
+
+            obj.vx -= nx * 0.24;
+            obj.vy += 0.08;
+            obj.vz -= nz * 0.24;
+            obj.wy += (nx * vzi - nz * vxi) * 0.12;
+
+            vxi *= 0.45;
+            vyi = Math.max(vyi, 0.8);
+            vzi *= 0.45;
+          }
+        }
+
+        px[i] = x; py[i] = y; pz[i] = z;
+        vx[i] = vxi; vy[i] = vyi; vz[i] = vzi;
+      }
+
+      function stepHydroMeshPhysics(dtFrame) {
+        for (let i = activeFluidCount - 1; i >= 0; i--) {
+          life[i] -= dtFrame;
+          if (py[i] <= 0.02) {
+            if (Math.random() < 0.28) {
+              spawnOceanSplashRing(px[i], pz[i], 1.0);
+              if (Math.random() < 0.22) SoundFX.playSplash(1.15, 0.03);
+            }
+            removeFluidParticle(i);
+            continue;
+          }
+          if (life[i] <= 0.0) {
+            removeFluidParticle(i);
+          }
+        }
+
+        const n = activeFluidCount;
+        if (n <= 0) return;
+
+        const subSteps = 2;
+        const solverIters = 2;
+        const dt = dtFrame / subSteps;
+        const invDt = 1.0 / dt;
+        const gravityY = -12.8;
+        const poly6Self = SPH_POLY6 * SPH_H2 * SPH_H2 * SPH_H2;
+        const kCorr = 0.00045;
+
+        for (let step = 0; step < subSteps; step++) {
+          for (let i = 0; i < n; i++) {
+            oldX[i] = px[i];
+            oldY[i] = py[i];
+            oldZ[i] = pz[i];
+
+            vy[i] += gravityY * dt;
+            vx[i] *= 0.996;
+            vy[i] *= 0.996;
+            vz[i] *= 0.996;
+
+            px[i] += vx[i] * dt;
+            py[i] += vy[i] * dt;
+            pz[i] += vz[i] * dt;
+
+            collideParticleWithArena(i);
+          }
+
+          head.fill(-1);
+          for (let i = 0; i < n; i++) {
+            const ix = Math.floor((px[i] + 32.0) * SPH_INV_CELL);
+            const iy = Math.floor((py[i] + 16.0) * SPH_INV_CELL);
+            const iz = Math.floor((pz[i] + 32.0) * SPH_INV_CELL);
+            const h = hashCoords(ix, iy, iz);
+            next[i] = head[h];
+            head[h] = i;
+          }
+
+          for (let i = 0; i < n; i++) {
+            const xi = px[i], yi = py[i], zi = pz[i];
+            const ownI = owner[i];
+            const cix = Math.floor((xi + 32.0) * SPH_INV_CELL);
+            const ciy = Math.floor((yi + 16.0) * SPH_INV_CELL);
+            const ciz = Math.floor((zi + 32.0) * SPH_INV_CELL);
+
+            const base = i * MAX_NEIGHBORS;
+            let count = 0;
+            let rho = poly6Self;
+            let gradIx = 0, gradIy = 0, gradIz = 0;
+            let sumGradSq = 0;
+
+            for (let oz = -1; oz <= 1; oz++) {
+              for (let oy = -1; oy <= 1; oy++) {
+                for (let ox = -1; ox <= 1; ox++) {
+                  let j = head[hashCoords(cix + ox, ciy + oy, ciz + oz)];
+                  while (j !== -1) {
+                    if (j !== i && owner[j] === ownI) {
+                      const rx = xi - px[j];
+                      const ry = yi - py[j];
+                      const rz = zi - pz[j];
+                      const r2 = rx * rx + ry * ry + rz * rz;
+                      if (r2 < SPH_H2 && r2 > 1e-10) {
+                        const r = Math.sqrt(r2);
+                        const diff = SPH_H2 - r2;
+                        rho += SPH_POLY6 * diff * diff * diff;
+
+                        const hr = SPH_H - r;
+                        const gScale = SPH_SPIKY_GRAD * hr * hr * SPH_INV_REST / r;
+                        const gx = gScale * rx;
+                        const gy = gScale * ry;
+                        const gz = gScale * rz;
+
+                        gradIx += gx;
+                        gradIy += gy;
+                        gradIz += gz;
+                        sumGradSq += gx * gx + gy * gy + gz * gz;
+
+                        if (count < MAX_NEIGHBORS) {
+                          nIdx[base + count] = j;
+                          nDist[base + count] = r;
+                          count++;
+                        }
+                      }
+                    }
+                    j = next[j];
+                  }
+                }
+              }
+            }
+
+            nCount[i] = count;
+            const C = rho * SPH_INV_REST - 1.0;
+            if (C > 0.0) {
+              sumGradSq += gradIx * gradIx + gradIy * gradIy + gradIz * gradIz;
+              lambda[i] = -C / (sumGradSq + 450.0);
+            } else {
+              lambda[i] = 0.0;
+            }
+          }
+
+          for (let iter = 0; iter < solverIters; iter++) {
+            for (let i = 0; i < n; i++) {
+              const li = lambda[i];
+              const xi = px[i], yi = py[i], zi = pz[i];
+              const base = i * MAX_NEIGHBORS;
+              const count = nCount[i];
+              let dpx = 0, dpy = 0, dpz = 0;
+
+              for (let k = 0; k < count; k++) {
+                const r = nDist[base + k];
+                if (r > 0.0) {
+                  const j = nIdx[base + k];
+                  const rx = xi - px[j];
+                  const ry = yi - py[j];
+                  const rz = zi - pz[j];
+                  const hr = SPH_H - r;
+                  const diff = SPH_H2 - r * r;
+                  const wRatio = (SPH_POLY6 * diff * diff * diff) * SPH_INV_CORR_DENOM;
+                  const w2 = wRatio * wRatio;
+                  const sCorr = -kCorr * (w2 * w2);
+
+                  const coeff = (li + lambda[j] + sCorr) * SPH_SPIKY_GRAD * hr * hr * SPH_INV_REST / r;
+                  dpx += coeff * rx;
+                  dpy += coeff * ry;
+                  dpz += coeff * rz;
+                }
+              }
+              deltaX[i] = dpx;
+              deltaY[i] = dpy;
+              deltaZ[i] = dpz;
+            }
+
+            for (let i = 0; i < n; i++) {
+              px[i] += deltaX[i];
+              py[i] += deltaY[i];
+              pz[i] += deltaZ[i];
+              collideParticleWithArena(i);
+            }
+          }
+
+          for (let i = 0; i < n; i++) {
+            vx[i] = (px[i] - oldX[i]) * invDt;
+            vy[i] = (py[i] - oldY[i]) * invDt;
+            vz[i] = (pz[i] - oldZ[i]) * invDt;
+          }
+
+          const xsphWeight = 0.045;
+          for (let i = 0; i < n; i++) {
+            const vxi = vx[i], vyi = vy[i], vzi = vz[i];
+            const base = i * MAX_NEIGHBORS;
+            const count = nCount[i];
+            let sumVx = 0, sumVy = 0, sumVz = 0;
+
+            for (let k = 0; k < count; k++) {
+              const r = nDist[base + k];
+              if (r > 0.0) {
+                const j = nIdx[base + k];
+                const diff = SPH_H2 - r * r;
+                const w = SPH_POLY6 * diff * diff * diff * SPH_INV_REST;
+                sumVx += (vx[j] - vxi) * w;
+                sumVy += (vy[j] - vyi) * w;
+                sumVz += (vz[j] - vzi) * w;
+              }
+            }
+            deltaX[i] = vxi + xsphWeight * sumVx;
+            deltaY[i] = vyi + xsphWeight * sumVy;
+            deltaZ[i] = vzi + xsphWeight * sumVz;
+          }
+
+          for (let i = 0; i < n; i++) {
+            vx[i] = deltaX[i];
+            vy[i] = deltaY[i];
+            vz[i] = deltaZ[i];
+          }
+        }
+      }
+
+      // =========================================================================
+      // 7. DUAL-LAYER HYDROMESH RENDERING (3D SURFACE NETS + GLOSSY DROPLETS)
+      // =========================================================================
+      const SN_NX = 26;
+      const SN_NY = 18;
+      const SN_NZ = 26;
+      const SN_TOTAL = SN_NX * SN_NY * SN_NZ;
+      const SN_SLICE = SN_NX * SN_NY;
+      const MAX_SN_VERTS = 16000;
+      const MAX_SN_INDICES = 96000;
+
+      const snDensity = new Float32Array(SN_TOTAL);
+      const snSmooth = new Float32Array(SN_TOTAL);
+      const snCellVert = new Int32Array(SN_TOTAL);
+      const snCellStamp = new Int32Array(SN_TOTAL);
+      let snStamp = 1;
+
+      const splatWx = new Float32Array(32);
+      const splatWy = new Float32Array(32);
+      const splatWz = new Float32Array(32);
+      const snCornerVals = new Float32Array(8);
+      const snLapAccum = new Float32Array(MAX_SN_VERTS * 3);
+      const snLapWeight = new Float32Array(MAX_SN_VERTS);
+
+      const SN_EDGE_PAIRS = [
+        [0, 1], [2, 3], [4, 5], [6, 7],
+        [0, 2], [1, 3], [4, 6], [5, 7],
+        [0, 4], [1, 5], [2, 6], [3, 7]
+      ];
+      const SN_CORNER_X = [0, 1, 0, 1, 0, 1, 0, 1];
+      const SN_CORNER_Y = [0, 0, 1, 1, 0, 0, 1, 1];
+      const SN_CORNER_Z = [0, 0, 0, 0, 1, 1, 1, 1];
+
+      function createTeamWaterRenderer(hexColor) {
+        const posArr = new Float32Array(MAX_SN_VERTS * 3);
+        const normArr = new Float32Array(MAX_SN_VERTS * 3);
+        const idxArr = new Uint32Array(MAX_SN_INDICES);
+
+        const geo = new THREE.BufferGeometry();
+        const posAttr = new THREE.BufferAttribute(posArr, 3);
+        posAttr.setUsage(THREE.DynamicDrawUsage);
+        const normAttr = new THREE.BufferAttribute(normArr, 3);
+        normAttr.setUsage(THREE.DynamicDrawUsage);
+        const idxAttr = new THREE.BufferAttribute(idxArr, 1);
+        idxAttr.setUsage(THREE.DynamicDrawUsage);
+
+        geo.setAttribute('position', posAttr);
+        geo.setAttribute('normal', normAttr);
+        geo.setIndex(idxAttr);
+        geo.setDrawRange(0, 0);
+
+        const mat = new THREE.MeshPhysicalMaterial({
+          color: new THREE.Color(hexColor),
+          roughness: 0.03,
+          metalness: 0.02,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.025,
+          reflectivity: 1.0,
+          envMapIntensity: 1.75,
+          transparent: true,
+          opacity: 0.86
+        });
+
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.frustumCulled = false;
+        mesh.castShadow = true;
+        scene.add(mesh);
+
+        const dropGeo = new THREE.SphereGeometry(1, 10, 8);
+        const dropMat = new THREE.MeshPhysicalMaterial({
+          color: new THREE.Color(hexColor).lerp(new THREE.Color('#ffffff'), 0.22),
+          roughness: 0.04,
+          metalness: 0.02,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.03,
+          reflectivity: 1.0,
+          envMapIntensity: 1.6,
+          transparent: true,
+          opacity: 0.88
+        });
+        const dropInst = new THREE.InstancedMesh(dropGeo, dropMat, MAX_FLUID_PARTICLES);
+        dropInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        dropInst.frustumCulled = false;
+        scene.add(dropInst);
+
+        return { geo, posArr, normArr, idxArr, posAttr, normAttr, idxAttr, mesh, dropInst };
+      }
+
+      const playerWaterVis = createTeamWaterRenderer('#00b4ff');
+      const botWaterVis = createTeamWaterRenderer('#ff3b7f');
+
+      function updateTeamHydroSurface(teamId, vis) {
+        let minX = 1e9, maxX = -1e9;
+        let minY = 1e9, maxY = -1e9;
+        let minZ = 1e9, maxZ = -1e9;
+        let count = 0;
+
+        const matArr = vis.dropInst.instanceMatrix.array;
+        for (let i = 0; i < activeFluidCount; i++) {
+          if (owner[i] !== teamId) continue;
+          const x = px[i], y = py[i], z = pz[i];
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+          if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+
+          const r = 0.068 * Math.min(1.0, life[i] * 2.5 + 0.35);
+          const o = count << 4;
+          matArr[o] = r; matArr[o + 1] = 0; matArr[o + 2] = 0; matArr[o + 3] = 0;
+          matArr[o + 4] = 0; matArr[o + 5] = r; matArr[o + 6] = 0; matArr[o + 7] = 0;
+          matArr[o + 8] = 0; matArr[o + 9] = 0; matArr[o + 10] = r; matArr[o + 11] = 0;
+          matArr[o + 12] = x; matArr[o + 13] = y; matArr[o + 14] = z; matArr[o + 15] = 1;
+          count++;
+        }
+
+        vis.dropInst.count = count;
+        vis.dropInst.instanceMatrix.needsUpdate = true;
+
+        if (count < 2) {
+          vis.geo.setDrawRange(0, 0);
+          return;
+        }
+
+        const rm = 0.28;
+        const pad = rm * 1.45;
+        const boxMinX = minX - pad, boxMaxX = maxX + pad;
+        const boxMinY = minY - pad, boxMaxY = maxY + pad;
+        const boxMinZ = minZ - pad, boxMaxZ = maxZ + pad;
+
+        const spanX = Math.max(0.6, boxMaxX - boxMinX);
+        const spanY = Math.max(0.6, boxMaxY - boxMinY);
+        const spanZ = Math.max(0.6, boxMaxZ - boxMinZ);
+
+        const dx = Math.max(0.085, spanX / (SN_NX - 1));
+        const dy = Math.max(0.085, spanY / (SN_NY - 1));
+        const dz = Math.max(0.085, spanZ / (SN_NZ - 1));
+        const invDx = 1.0 / dx;
+        const invDy = 1.0 / dy;
+        const invDz = 1.0 / dz;
+
+        const rm2 = rm * rm;
+        const invRm2 = 1.0 / rm2;
+        const isoLevel = 0.24;
+
+        snDensity.fill(0.0);
+        snSmooth.fill(0.0);
+
+        for (let i = 0; i < activeFluidCount; i++) {
+          if (owner[i] !== teamId) continue;
+          const x = px[i], y = py[i], z = pz[i];
+          const ix0 = Math.max(1, Math.floor((x - rm - boxMinX) * invDx));
+          const ix1 = Math.min(SN_NX - 2, Math.ceil((x + rm - boxMinX) * invDx));
+          const iy0 = Math.max(1, Math.floor((y - rm - boxMinY) * invDy));
+          const iy1 = Math.min(SN_NY - 2, Math.ceil((y + rm - boxMinY) * invDy));
+          const iz0 = Math.max(1, Math.floor((z - rm - boxMinZ) * invDz));
+          const iz1 = Math.min(SN_NZ - 2, Math.ceil((z + rm - boxMinZ) * invDz));
+          if (ix0 > ix1 || iy0 > iy1 || iz0 > iz1) continue;
+
+          for (let ix = ix0; ix <= ix1; ix++) { const d = (boxMinX + ix * dx) - x; splatWx[ix] = d * d; }
+          for (let iy = iy0; iy <= iy1; iy++) { const d = (boxMinY + iy * dy) - y; splatWy[iy] = d * d; }
+          for (let iz = iz0; iz <= iz1; iz++) { const d = (boxMinZ + iz * dz) - z; splatWz[iz] = d * d; }
+
+          for (let iz = iz0; iz <= iz1; iz++) {
+            const rz2 = splatWz[iz];
+            const zOff = iz * SN_SLICE;
+            for (let iy = iy0; iy <= iy1; iy++) {
+              const rzy2 = rz2 + splatWy[iy];
+              if (rzy2 >= rm2) continue;
+              const rowOff = zOff + iy * SN_NX;
+              for (let ix = ix0; ix <= ix1; ix++) {
+                const r2 = rzy2 + splatWx[ix];
+                if (r2 < rm2) {
+                  const t = 1.0 - r2 * invRm2;
+                  snDensity[rowOff + ix] += t * t * t;
+                }
+              }
+            }
+          }
+        }
+
+        for (let iz = 1; iz < SN_NZ - 1; iz++) {
+          const zOff = iz * SN_SLICE;
+          for (let iy = 1; iy < SN_NY - 1; iy++) {
+            const row = zOff + iy * SN_NX;
+            for (let ix = 1; ix < SN_NX - 1; ix++) {
+              const k = row + ix;
+              snSmooth[k] = 0.25 * snDensity[k - 1] + 0.5 * snDensity[k] + 0.25 * snDensity[k + 1];
+            }
+          }
+        }
+        for (let iz = 1; iz < SN_NZ - 1; iz++) {
+          const zOff = iz * SN_SLICE;
+          for (let iy = 1; iy < SN_NY - 1; iy++) {
+            const row = zOff + iy * SN_NX;
+            for (let ix = 1; ix < SN_NX - 1; ix++) {
+              const k = row + ix;
+              snDensity[k] = 0.25 * snSmooth[k - SN_NX] + 0.5 * snSmooth[k] + 0.25 * snSmooth[k + SN_NX];
+            }
+          }
+        }
+        for (let iz = 1; iz < SN_NZ - 1; iz++) {
+          const zOff = iz * SN_SLICE;
+          for (let iy = 1; iy < SN_NY - 1; iy++) {
+            const row = zOff + iy * SN_NX;
+            for (let ix = 1; ix < SN_NX - 1; ix++) {
+              const k = row + ix;
+              snSmooth[k] = 0.25 * snDensity[k - SN_SLICE] + 0.5 * snDensity[k] + 0.25 * snDensity[k + SN_SLICE];
+            }
+          }
+        }
+
+        const stamp = ++snStamp;
+        let vertCount = 0;
+        const posArr = vis.posArr;
+        const normArr = vis.normArr;
+        const idxArr = vis.idxArr;
+
+        for (let cz = 0; cz < SN_NZ - 1; cz++) {
+          const zOff = cz * SN_SLICE;
+          for (let cy = 0; cy < SN_NY - 1; cy++) {
+            const row = zOff + cy * SN_NX;
+            for (let cx = 0; cx < SN_NX - 1; cx++) {
+              const k = row + cx;
+              const v0 = snSmooth[k];
+              const v1 = snSmooth[k + 1];
+              const v2 = snSmooth[k + SN_NX];
+              const v3 = snSmooth[k + SN_NX + 1];
+              const kZ = k + SN_SLICE;
+              const v4 = snSmooth[kZ];
+              const v5 = snSmooth[kZ + 1];
+              const v6 = snSmooth[kZ + SN_NX];
+              const v7 = snSmooth[kZ + SN_NX + 1];
+
+              let mask = 0;
+              if (v0 > isoLevel) mask |= 1;
+              if (v1 > isoLevel) mask |= 2;
+              if (v2 > isoLevel) mask |= 4;
+              if (v3 > isoLevel) mask |= 8;
+              if (v4 > isoLevel) mask |= 16;
+              if (v5 > isoLevel) mask |= 32;
+              if (v6 > isoLevel) mask |= 64;
+              if (v7 > isoLevel) mask |= 128;
+
+              if (mask === 0 || mask === 255) continue;
+
+              snCornerVals[0] = v0; snCornerVals[1] = v1; snCornerVals[2] = v2; snCornerVals[3] = v3;
+              snCornerVals[4] = v4; snCornerVals[5] = v5; snCornerVals[6] = v6; snCornerVals[7] = v7;
+
+              let sumX = 0, sumY = 0, sumZ = 0, crossCount = 0;
+              for (let e = 0; e < 12; e++) {
+                const pair = SN_EDGE_PAIRS[e];
+                const cA = pair[0], cB = pair[1];
+                if (((mask & (1 << cA)) !== 0) !== ((mask & (1 << cB)) !== 0)) {
+                  const valA = snCornerVals[cA], valB = snCornerVals[cB];
+                  const denom = valB - valA;
+                  const t = Math.abs(denom) > 1e-6 ? Math.max(0, Math.min(1, (isoLevel - valA) / denom)) : 0.5;
+                  sumX += SN_CORNER_X[cA] + t * (SN_CORNER_X[cB] - SN_CORNER_X[cA]);
+                  sumY += SN_CORNER_Y[cA] + t * (SN_CORNER_Y[cB] - SN_CORNER_Y[cA]);
+                  sumZ += SN_CORNER_Z[cA] + t * (SN_CORNER_Z[cB] - SN_CORNER_Z[cA]);
+                  crossCount++;
+                }
+              }
+
+              if (crossCount > 0 && vertCount < MAX_SN_VERTS) {
+                const invC = 1.0 / crossCount;
+                const v3Idx = vertCount * 3;
+                posArr[v3Idx]     = boxMinX + (cx + sumX * invC) * dx;
+                posArr[v3Idx + 1] = boxMinY + (cy + sumY * invC) * dy;
+                posArr[v3Idx + 2] = boxMinZ + (cz + sumZ * invC) * dz;
+                snCellVert[k] = vertCount;
+                snCellStamp[k] = stamp;
+                vertCount++;
+              }
+            }
+          }
+        }
+
+        let indexCount = 0;
+        const emitQuad = (c0, c1, c2, c3, flip) => {
+          if (snCellStamp[c0] !== stamp || snCellStamp[c1] !== stamp || snCellStamp[c2] !== stamp || snCellStamp[c3] !== stamp) return;
+          if (indexCount + 6 > MAX_SN_INDICES) return;
+          const i0 = snCellVert[c0], i1 = snCellVert[c1], i2 = snCellVert[c2], i3 = snCellVert[c3];
+          if (flip) {
+            idxArr[indexCount++] = i0; idxArr[indexCount++] = i2; idxArr[indexCount++] = i1;
+            idxArr[indexCount++] = i0; idxArr[indexCount++] = i3; idxArr[indexCount++] = i2;
+          } else {
+            idxArr[indexCount++] = i0; idxArr[indexCount++] = i1; idxArr[indexCount++] = i2;
+            idxArr[indexCount++] = i0; idxArr[indexCount++] = i2; idxArr[indexCount++] = i3;
+          }
+        };
+
+        for (let cz = 0; cz < SN_NZ - 1; cz++) {
+          const zOff = cz * SN_SLICE;
+          for (let cy = 0; cy < SN_NY - 1; cy++) {
+            const row = zOff + cy * SN_NX;
+            for (let cx = 0; cx < SN_NX - 1; cx++) {
+              const k = row + cx;
+              if (snCellStamp[k] !== stamp) continue;
+              const inBase = snSmooth[k] > isoLevel;
+              if (cy > 0 && cz > 0 && (inBase !== (snSmooth[k + 1] > isoLevel))) {
+                emitQuad(k - SN_NX - SN_SLICE, k - SN_SLICE, k, k - SN_NX, !inBase);
+              }
+              if (cx > 0 && cz > 0 && (inBase !== (snSmooth[k + SN_NX] > isoLevel))) {
+                emitQuad(k - 1 - SN_SLICE, k - 1, k, k - SN_SLICE, !inBase);
+              }
+              if (cx > 0 && cy > 0 && (inBase !== (snSmooth[k + SN_SLICE] > isoLevel))) {
+                emitQuad(k - 1 - SN_NX, k - SN_NX, k, k - 1, !inBase);
+              }
+            }
+          }
+        }
+
+        if (indexCount === 0) {
+          vis.geo.setDrawRange(0, 0);
+          return;
+        }
+
+        for (let pass = 0; pass < 2; pass++) {
+          snLapAccum.fill(0.0, 0, vertCount * 3);
+          snLapWeight.fill(0.0, 0, vertCount);
+          for (let t = 0; t < indexCount; t += 3) {
+            const a = idxArr[t], b = idxArr[t + 1], c = idxArr[t + 2];
+            const a3 = a * 3, b3 = b * 3, c3 = c * 3;
+            snLapAccum[a3] += posArr[b3] + posArr[c3];
+            snLapAccum[a3 + 1] += posArr[b3 + 1] + posArr[c3 + 1];
+            snLapAccum[a3 + 2] += posArr[b3 + 2] + posArr[c3 + 2];
+            snLapWeight[a] += 2.0;
+
+            snLapAccum[b3] += posArr[a3] + posArr[c3];
+            snLapAccum[b3 + 1] += posArr[a3 + 1] + posArr[c3 + 1];
+            snLapAccum[b3 + 2] += posArr[a3 + 2] + posArr[c3 + 2];
+            snLapWeight[b] += 2.0;
+
+            snLapAccum[c3] += posArr[a3] + posArr[b3];
+            snLapAccum[c3 + 1] += posArr[a3 + 1] + posArr[b3 + 1];
+            snLapAccum[c3 + 2] += posArr[a3 + 2] + posArr[b3 + 2];
+            snLapWeight[c] += 2.0;
+          }
+          for (let v = 0; v < vertCount; v++) {
+            const w = snLapWeight[v];
+            if (w > 0) {
+              const invW = 1.0 / w;
+              const v3 = v * 3;
+              posArr[v3]     += 0.38 * (snLapAccum[v3] * invW - posArr[v3]);
+              posArr[v3 + 1] += 0.38 * (snLapAccum[v3 + 1] * invW - posArr[v3 + 1]);
+              posArr[v3 + 2] += 0.38 * (snLapAccum[v3 + 2] * invW - posArr[v3 + 2]);
+            }
+          }
+        }
+
+        normArr.fill(0.0, 0, vertCount * 3);
+        for (let t = 0; t < indexCount; t += 3) {
+          const a = idxArr[t], b = idxArr[t + 1], c = idxArr[t + 2];
+          const a3 = a * 3, b3 = b * 3, c3 = c * 3;
+          const ax = posArr[a3], ay = posArr[a3 + 1], az = posArr[a3 + 2];
+          const e1x = posArr[b3] - ax, e1y = posArr[b3 + 1] - ay, e1z = posArr[b3 + 2] - az;
+          const e2x = posArr[c3] - ax, e2y = posArr[c3 + 1] - ay, e2z = posArr[c3 + 2] - az;
+          const fnx = e1y * e2z - e1z * e2y;
+          const fny = e1z * e2x - e1x * e2z;
+          const fnz = e1x * e2y - e1y * e2x;
+          normArr[a3] += fnx; normArr[a3 + 1] += fny; normArr[a3 + 2] += fnz;
+          normArr[b3] += fnx; normArr[b3 + 1] += fny; normArr[b3 + 2] += fnz;
+          normArr[c3] += fnx; normArr[c3 + 1] += fny; normArr[c3 + 2] += fnz;
+        }
+        for (let v = 0; v < vertCount; v++) {
+          const v3 = v * 3;
+          const len = Math.hypot(normArr[v3], normArr[v3 + 1], normArr[v3 + 2]);
+          if (len > 1e-7) {
+            const invL = 1.0 / len;
+            normArr[v3] *= invL; normArr[v3 + 1] *= invL; normArr[v3 + 2] *= invL;
+          } else {
+            normArr[v3] = 0; normArr[v3 + 1] = 1; normArr[v3 + 2] = 0;
+          }
+        }
+
+        vis.posAttr.needsUpdate = true;
+        vis.normAttr.needsUpdate = true;
+        vis.idxAttr.needsUpdate = true;
+        vis.geo.setDrawRange(0, indexCount);
+      }
+
+      // =========================================================================
+      // 8. ULTRA-DETAILED 3D HYDRO-BLASTER & COMPACT MECHA CHAMELEON HUMANOID
+      // =========================================================================
+      function buildDetailedHydroBlaster(liquidColorHex) {
+        const gun = new THREE.Group();
+
+        const shellWhiteMat = new THREE.MeshPhysicalMaterial({
+          color: 0xf8fafc,
+          roughness: 0.16,
+          metalness: 0.08,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.06
+        });
+        const aeroBlueMat = new THREE.MeshPhysicalMaterial({
+          color: new THREE.Color(liquidColorHex),
+          roughness: 0.18,
+          metalness: 0.12,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.05
+        });
+        const darkAlloyMat = new THREE.MeshStandardMaterial({
+          color: 0x1e293b,
+          roughness: 0.34,
+          metalness: 0.68
+        });
+        const chromeMat = new THREE.MeshStandardMaterial({
+          color: 0xe2e8f0,
+          roughness: 0.12,
+          metalness: 0.92
+        });
+        const brassMat = new THREE.MeshStandardMaterial({
+          color: 0xf59e0b,
+          roughness: 0.24,
+          metalness: 0.84
+        });
+        const glassTankMat = new THREE.MeshPhysicalMaterial({
+          color: 0xe0f7ff,
+          roughness: 0.04,
+          metalness: 0.02,
+          clearcoat: 1.0,
+          transparent: true,
+          opacity: 0.34,
+          depthWrite: false
+        });
+        const innerWaterMat = new THREE.MeshPhysicalMaterial({
+          color: new THREE.Color(liquidColorHex),
+          emissive: new THREE.Color(liquidColorHex),
+          emissiveIntensity: 0.35,
+          roughness: 0.05,
+          clearcoat: 1.0,
+          transparent: true,
+          opacity: 0.90
+        });
+
+        // 1. Sculpted Main Receiver & Side Fins
+        const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.13, 0.42), shellWhiteMat);
+        receiver.position.set(0, 0.02, 0.04);
+        receiver.castShadow = true;
+        gun.add(receiver);
+
+        const aeroSideFinL = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.064, 0.34), aeroBlueMat);
+        aeroSideFinL.position.set(0.058, 0.032, 0.05);
+        const aeroSideFinR = aeroSideFinL.clone();
+        aeroSideFinR.position.x = -0.058;
+        gun.add(aeroSideFinL, aeroSideFinR);
+
+        for (let v = 0; v < 4; v++) {
+          const vent = new THREE.Mesh(new THREE.BoxGeometry(0.118, 0.011, 0.02), darkAlloyMat);
+          vent.position.set(0, 0.052, -0.04 + v * 0.042);
+          gun.add(vent);
+        }
+
+        // Ergonomic Pistol Grip & Trigger Guard
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.15, 0.078), darkAlloyMat);
+        grip.position.set(0, -0.09, -0.095);
+        grip.rotation.x = 0.28;
+        const triggerGuard = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.008, 8, 16, Math.PI), chromeMat);
+        triggerGuard.rotation.y = Math.PI * 0.5;
+        triggerGuard.position.set(0, -0.052, -0.02);
+        gun.add(grip, triggerGuard);
+
+        // 2. Top Transparent Pressurized Water Tank + Animated Internal Water Level
+        const tankGroup = new THREE.Group();
+        tankGroup.position.set(0, 0.148, -0.02);
+
+        const tankCapsGeo = new THREE.CylinderGeometry(0.062, 0.062, 0.022, 20);
+        tankCapsGeo.rotateX(Math.PI * 0.5);
+        const tankFrontCap = new THREE.Mesh(tankCapsGeo, chromeMat);
+        tankFrontCap.position.z = 0.14;
+        const tankRearCap = new THREE.Mesh(tankCapsGeo, chromeMat);
+        tankRearCap.position.z = -0.14;
+
+        const tankGlassGeo = new THREE.CylinderGeometry(0.058, 0.058, 0.26, 20);
+        tankGlassGeo.rotateX(Math.PI * 0.5);
+        const tankGlass = new THREE.Mesh(tankGlassGeo, glassTankMat);
+
+        const waterCoreGeo = new THREE.CylinderGeometry(0.050, 0.050, 0.245, 18);
+        waterCoreGeo.rotateX(Math.PI * 0.5);
+        waterCoreGeo.translate(0, 0, 0.1225);
+        const waterCore = new THREE.Mesh(waterCoreGeo, innerWaterMat);
+        waterCore.position.z = -0.1225;
+
+        tankGroup.add(tankFrontCap, tankRearCap, waterCore, tankGlass);
+        gun.add(tankGroup);
+
+        // 3. Dual Lower Air-Pressure Canisters with Brass Fittings & Pressure Gauges
+        [-0.044, 0.044].forEach((xOff, idx) => {
+          const canGeo = new THREE.CylinderGeometry(0.032, 0.032, 0.25, 16);
+          canGeo.rotateX(Math.PI * 0.5);
+          const canister = new THREE.Mesh(canGeo, idx === 0 ? aeroBlueMat : shellWhiteMat);
+          canister.position.set(xOff, -0.065, 0.105);
+
+          const brassValve = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.024, 0.032, 14), brassMat);
+          brassValve.rotation.x = Math.PI * 0.5;
+          brassValve.position.set(xOff, -0.065, 0.24);
+
+          const gauge = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.011, 14), brassMat);
+          gauge.rotation.z = Math.PI * 0.5;
+          gauge.position.set(xOff + (xOff > 0 ? 0.032 : -0.032), -0.06, 0.04);
+          const dial = new THREE.Mesh(new THREE.CircleGeometry(0.016, 12), shellWhiteMat);
+          dial.rotation.y = xOff > 0 ? Math.PI * 0.5 : -Math.PI * 0.5;
+          dial.position.set(xOff + (xOff > 0 ? 0.038 : -0.038), -0.06, 0.04);
+
+          gun.add(canister, brassValve, gauge, dial);
+        });
+
+        // 4. Curved Translucent Pressure Hoses
+        const hoseCurveL = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(0.044, -0.065, 0.24),
+          new THREE.Vector3(0.084, -0.038, 0.28),
+          new THREE.Vector3(0.072, 0.038, 0.23),
+          new THREE.Vector3(0.030, 0.056, 0.18)
+        ]);
+        const hoseL = new THREE.Mesh(new THREE.TubeGeometry(hoseCurveL, 14, 0.01, 8, false), innerWaterMat);
+        const hoseCurveR = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(-0.044, -0.065, 0.24),
+          new THREE.Vector3(-0.084, -0.038, 0.28),
+          new THREE.Vector3(-0.072, 0.038, 0.23),
+          new THREE.Vector3(-0.030, 0.056, 0.18)
+        ]);
+        const hoseR = new THREE.Mesh(new THREE.TubeGeometry(hoseCurveR, 14, 0.01, 8, false), innerWaterMat);
+        gun.add(hoseL, hoseR);
+
+        // 5. Holographic Aqua Reflex Sight
+        const sightBase = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.02, 0.085), darkAlloyMat);
+        sightBase.position.set(0, 0.094, 0.15);
+        const sightHood = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.005, 8, 18, Math.PI), aeroBlueMat);
+        sightHood.position.set(0, 0.106, 0.15);
+        const sightGlass = new THREE.Mesh(
+          new THREE.CircleGeometry(0.022, 16),
+          new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.45, side: THREE.DoubleSide })
+        );
+        sightGlass.position.set(0, 0.106, 0.15);
+        gun.add(sightBase, sightHood, sightGlass);
+
+        // 6. Animated Reciprocating Pump Foregrip
+        const pumpGroup = new THREE.Group();
+        pumpGroup.position.set(0, -0.018, 0.26);
+        const pumpBody = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.046, 0.125, 16), aeroBlueMat);
+        pumpBody.rotation.x = Math.PI * 0.5;
+        pumpGroup.add(pumpBody);
+        for (let r = -2; r <= 2; r++) {
+          const rib = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.005, 6, 16), darkAlloyMat);
+          rib.position.z = r * 0.021;
+          pumpGroup.add(rib);
+        }
+        gun.add(pumpGroup);
+
+        // 7. Chrome & Brass Telescoping Nozzle + Pressurized Water Cone & Vortex Ring
+        const barrelStage1 = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.036, 0.15, 18), chromeMat);
+        barrelStage1.rotation.x = Math.PI * 0.5;
+        barrelStage1.position.set(0, 0.026, 0.31);
+
+        const brassCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.026, 18), brassMat);
+        brassCollar.rotation.x = Math.PI * 0.5;
+        brassCollar.position.set(0, 0.026, 0.39);
+
+        const nozzleTip = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.026, 0.085, 16), brassMat);
+        nozzleTip.rotation.x = Math.PI * 0.5;
+        nozzleTip.position.set(0, 0.026, 0.44);
+
+        const muzzlePoint = new THREE.Object3D();
+        muzzlePoint.position.set(0, 0.026, 0.49);
+
+        const muzzleCone = new THREE.Mesh(
+          new THREE.ConeGeometry(0.045, 0.16, 12, 1, true),
+          new THREE.MeshBasicMaterial({ color: 0xe0f7ff, transparent: true, opacity: 0.72, side: THREE.DoubleSide })
+        );
+        muzzleCone.rotation.x = Math.PI * 0.5;
+        muzzleCone.position.set(0, 0.026, 0.56);
+        muzzleCone.visible = false;
+
+        const muzzleRing = new THREE.Mesh(
+          new THREE.TorusGeometry(0.042, 0.007, 8, 18),
+          new THREE.MeshBasicMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.78 })
+        );
+        muzzleRing.position.set(0, 0.026, 0.51);
+        muzzleRing.visible = false;
+
+        gun.add(barrelStage1, brassCollar, nozzleTip, muzzlePoint, muzzleCone, muzzleRing);
+
+        return {
+          root: gun,
+          waterCore,
+          pumpGroup,
+          muzzlePoint,
+          muzzleCone,
+          muzzleRing
+        };
+      }
+
+      // Compact Mecha Chameleon Style Humanoid (~1.48m standing height, ~0.78m sliding height)
+      function buildMechaChameleonCharacter(suitHex, liquidHex) {
+        const root = new THREE.Group();
+
+        const suitMat = new THREE.MeshPhysicalMaterial({
+          color: new THREE.Color(suitHex),
+          roughness: 0.24,
+          metalness: 0.14,
+          clearcoat: 0.72,
+          clearcoatRoughness: 0.14
+        });
+        const jointMat = new THREE.MeshStandardMaterial({
+          color: 0x334155,
+          roughness: 0.42,
+          metalness: 0.45
+        });
+        const visorMat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(liquidHex),
+          emissive: new THREE.Color(liquidHex),
+          emissiveIntensity: 0.75,
+          roughness: 0.1
+        });
+        const boosterMat = new THREE.MeshPhysicalMaterial({
+          color: 0xf8fafc,
+          roughness: 0.15,
+          clearcoat: 1.0
+        });
+        const thrusterMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(liquidHex)
+        });
+
+        function makeCapsuleLimb(rTop, rBot, len, mat) {
+          const g = new THREE.Group();
+          const cyl = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, len, 16), mat);
+          cyl.position.y = -len * 0.5;
+          cyl.castShadow = true;
+          const topCap = new THREE.Mesh(new THREE.SphereGeometry(rTop, 14, 10), mat);
+          const botCap = new THREE.Mesh(new THREE.SphereGeometry(rBot, 14, 10), mat);
+          botCap.position.y = -len;
+          g.add(cyl, topCap, botCap);
+          return g;
+        }
+
+        // Compact Hips / Pelvis Root Pivot (y = 0.74 standing -> total crown height ~1.48m)
+        const hipsPivot = new THREE.Group();
+        hipsPivot.position.y = 0.74;
+        root.add(hipsPivot);
+
+        const pelvisMesh = new THREE.Mesh(new THREE.SphereGeometry(0.18, 18, 14), suitMat);
+        pelvisMesh.scale.set(1.14, 0.74, 0.88);
+        pelvisMesh.castShadow = true;
+        hipsPivot.add(pelvisMesh);
+
+        // Compact Rounded Segmented Torso Pivot
+        const torsoPivot = new THREE.Group();
+        torsoPivot.position.y = 0.06;
+        hipsPivot.add(torsoPivot);
+
+        const chestMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.215, 0.165, 0.38, 20), suitMat);
+        chestMesh.scale.set(1.10, 1.0, 0.80);
+        chestMesh.position.y = 0.20;
+        chestMesh.castShadow = true;
+        const shoulderDome = new THREE.Mesh(new THREE.SphereGeometry(0.215, 20, 14), suitMat);
+        shoulderDome.scale.set(1.14, 0.52, 0.82);
+        shoulderDome.position.y = 0.39;
+        shoulderDome.castShadow = true;
+        torsoPivot.add(chestMesh, shoulderDome);
+
+        // Twin Hydro-Booster Backpack
+        const backpackGroup = new THREE.Group();
+        backpackGroup.position.set(0, 0.23, -0.17);
+        const packCore = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.09), boosterMat);
+        backpackGroup.add(packCore);
+        const boosterRings = [];
+        [-0.065, 0.065].forEach((bx) => {
+          const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.046, 0.22, 14), boosterMat);
+          pod.position.set(bx, 0, -0.03);
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.008, 8, 16), thrusterMat);
+          ring.rotation.x = Math.PI * 0.5;
+          ring.position.set(bx, -0.115, -0.03);
+          backpackGroup.add(pod, ring);
+          boosterRings.push(ring);
+        });
+        torsoPivot.add(backpackGroup);
+
+        // Neck & Sleek Ovoid Head with Glowing Visor + Spring-Damper Dorsal Crest Fin
+        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.066, 0.080, 0.08, 14), jointMat);
+        neck.position.y = 0.45;
+        torsoPivot.add(neck);
+
+        const headPivot = new THREE.Group();
+        headPivot.position.y = 0.50;
+        torsoPivot.add(headPivot);
+
+        const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.155, 22, 18), suitMat);
+        headMesh.scale.set(0.94, 1.08, 1.02);
+        headMesh.position.y = 0.13;
+        headMesh.castShadow = true;
+
+        const visorStrip = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.148, 0.148, 0.032, 20, 1, false, -0.65, 1.3),
+          visorMat
+        );
+        visorStrip.scale.set(0.95, 1.0, 1.04);
+        visorStrip.position.set(0, 0.135, 0.01);
+
+        const crestPivot = new THREE.Group();
+        crestPivot.position.set(0, 0.26, -0.02);
+        const crestFin = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.11, 0.16), visorMat);
+        crestFin.position.set(0, 0.04, -0.05);
+        crestFin.rotation.x = -0.35;
+        crestPivot.add(crestFin);
+
+        headPivot.add(headMesh, visorStrip, crestPivot);
+
+        // Articulated Compact Arms + Hydro-Blaster
+        const rightShoulder = new THREE.Group();
+        rightShoulder.position.set(-0.25, 0.37, 0);
+        torsoPivot.add(rightShoulder);
+        const rightUpperArm = makeCapsuleLimb(0.070, 0.058, 0.23, suitMat);
+        rightShoulder.add(rightUpperArm);
+        const rightElbow = new THREE.Group();
+        rightElbow.position.y = -0.23;
+        rightShoulder.add(rightElbow);
+        const rightForearm = makeCapsuleLimb(0.058, 0.050, 0.22, suitMat);
+        rightElbow.add(rightForearm);
+
+        const blaster = buildDetailedHydroBlaster(liquidHex);
+        blaster.root.position.set(0.0, -0.22, 0.07);
+        blaster.root.rotation.x = Math.PI * 0.5;
+        rightElbow.add(blaster.root);
+
+        const leftShoulder = new THREE.Group();
+        leftShoulder.position.set(0.25, 0.37, 0);
+        torsoPivot.add(leftShoulder);
+        const leftUpperArm = makeCapsuleLimb(0.070, 0.058, 0.23, suitMat);
+        leftShoulder.add(leftUpperArm);
+        const leftElbow = new THREE.Group();
+        leftElbow.position.y = -0.23;
+        leftShoulder.add(leftElbow);
+        const leftForearm = makeCapsuleLimb(0.058, 0.050, 0.22, suitMat);
+        leftElbow.add(leftForearm);
+
+        // Articulated Legs with Ankle Pivots
+        const leftHip = new THREE.Group();
+        leftHip.position.set(0.105, -0.03, 0);
+        hipsPivot.add(leftHip);
+        const leftThigh = makeCapsuleLimb(0.092, 0.074, 0.33, suitMat);
+        leftHip.add(leftThigh);
+        const leftKnee = new THREE.Group();
+        leftKnee.position.y = -0.33;
+        leftHip.add(leftKnee);
+        const leftCalf = makeCapsuleLimb(0.074, 0.060, 0.33, suitMat);
+        const leftAnkle = new THREE.Group();
+        leftAnkle.position.set(0, -0.33, 0);
+        const leftFoot = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.06, 0.20), jointMat);
+        leftFoot.position.set(0, -0.01, 0.04);
+        leftAnkle.add(leftFoot);
+        leftKnee.add(leftCalf, leftAnkle);
+
+        const rightHip = new THREE.Group();
+        rightHip.position.set(-0.105, -0.03, 0);
+        hipsPivot.add(rightHip);
+        const rightThigh = makeCapsuleLimb(0.092, 0.074, 0.33, suitMat);
+        rightHip.add(rightThigh);
+        const rightKnee = new THREE.Group();
+        rightKnee.position.y = -0.33;
+        rightHip.add(rightKnee);
+        const rightCalf = makeCapsuleLimb(0.074, 0.060, 0.33, suitMat);
+        const rightAnkle = new THREE.Group();
+        rightAnkle.position.set(0, -0.33, 0);
+        const rightFoot = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.06, 0.20), jointMat);
+        rightFoot.position.set(0, -0.01, 0.04);
+        rightAnkle.add(rightFoot);
+        rightKnee.add(rightCalf, rightAnkle);
+
+        scene.add(root);
+
+        return {
+          root,
+          suitMat,
+          visorMat,
+          hipsPivot,
+          torsoPivot,
+          headPivot,
+          crestPivot,
+          backpackGroup,
+          boosterRings,
+          rightShoulder,
+          rightElbow,
+          leftShoulder,
+          leftElbow,
+          leftHip,
+          leftKnee,
+          leftAnkle,
+          rightHip,
+          rightKnee,
+          rightAnkle,
+          blaster
+        };
+      }
+
+      // =========================================================================
+      // 9. PLAYER & MID-SKILL BOT STATE + DECOUPLED COLLISIONS + SAFE FLOATS
+      // =========================================================================
+      const SPAWN_PLAYER = new THREE.Vector3(0, DECK_Y, 6.2);
+      const SPAWN_BOT = new THREE.Vector3(0, DECK_Y, -6.2);
+
+      const STAND_HEIGHT = 1.48;
+      const SLIDE_HEIGHT = 0.78;
+      const STEP_UP_MAX = 0.34;
+      const GRAVITY = 22.0;
+
+      function createFighter(teamId, suitHex, liquidHex, spawnPos, startYaw) {
+        const rig = buildMechaChameleonCharacter(suitHex, liquidHex);
+        rig.root.position.copy(spawnPos);
+        return {
+          team: teamId,
+          rig,
+          x: spawnPos.x,
+          y: spawnPos.y,
+          z: spawnPos.z,
+          vx: 0,
+          vy: 0,
+          vz: 0,
+          yaw: startYaw,
+          prevYaw: startYaw,
+          yawRate: 0,
+          pitch: 0,
+          grounded: true,
+          coyoteTimer: 0,
+          stepAccum: 0,
+          hp: 100,
+          tank: 100,
+          score: 0,
+          sprinting: false,
+          sliding: false,
+          slideTimer: 0,
+          slideCooldown: 0,
+          slideDirX: 0,
+          slideDirZ: -1,
+          firing: false,
+          fireAccum: 0,
+          animPhase: 0,
+          hitFlinch: 0,
+          // 3-Tier Jump & Landing Animation State
+          jumpType: 'idle', // 'idle' | 'walk' | 'sprint'
+          jumpLeadSign: 1,
+          jumpTime: 0,
+          airTime: 0,
+          landImpact: 0,
+          bankRoll: 0,
+          crestPitch: 0,
+          crestPitchVel: 0,
+          crestRoll: 0,
+          crestRollVel: 0,
+          celebrateTimer: 0,
+          pose: {
+            hipsY: 0.74, hipsZ: 0, hipsRotX: 0, hipsRotY: 0, hipsRotZ: 0,
+            torsoX: 0, torsoY: 0, torsoZ: 0,
+            headX: 0, headY: 0, headZ: 0,
+            rShX: -1.35, rShY: 0.06, rShZ: 0, rElbX: -0.24,
+            lShX: -0.35, lShY: -0.15, lShZ: 0.18, lElbX: -0.68,
+            lHipX: 0, lHipY: 0, lHipZ: 0.04, lKneeX: 0.05, lAnkX: 0, lAnkZ: 0,
+            rHipX: 0, rHipY: 0, rHipZ: -0.04, rKneeX: 0.05, rAnkX: 0, rAnkZ: 0
+          }
+        };
+      }
+
+      const player = createFighter(TEAM_PLAYER, '#94a3b8', '#00b4ff', SPAWN_PLAYER, Math.PI);
+      const bot = createFighter(TEAM_BOT, '#fb7185', '#ff3b7f', SPAWN_BOT, 0);
+
+      const botAI = {
+        wayX: -3.2,
+        wayZ: -3.8,
+        wayTimer: 1.5,
+        strafeDir: 1,
+        strafeTimer: 1.2,
+        burstTimer: 1.4,
+        burstFiring: true,
+        aimX: 0,
+        aimY: DECK_Y + 0.85,
+        aimZ: 6.2,
+        jumpTimer: 2.8
+      };
+
+      const matchState = {
+        started: false,
+        over: false,
+        mode: 'duel', // 'duel' | 'zen'
+        winScore: 5,
+        camYaw: Math.PI,
+        camPitch: 0.12,
+        invertMode: 'off', // 'off' (Invert: OFF) | 'xy' (Invert: X+Y) | 'y' (Invert: Y Only)
+        currentFov: 56,
+        camLandDip: 0,
+        hitmarkerTimer: 0,
+        bannerTimer: 0,
+        aimOnBot: false
+      };
+
+      function returnToStartScreen() {
+        SoundFX.setJetStream(false, 0);
+        activeFluidCount = 0;
+        matchState.started = false;
+        matchState.over = false;
+        player.firing = false;
+        bot.firing = false;
+        mouseDown = false;
+        touchInput.shootActive = false;
+
+        if (document.pointerLockElement === canvasEl) {
+          try { document.exitPointerLock(); } catch (err) {}
+        }
+
+        document.getElementById('pointer-hint').classList.add('hidden');
+        document.getElementById('gameover-modal').classList.add('hidden');
+        document.getElementById('start-modal').classList.remove('hidden');
+        document.getElementById('banner-toast').classList.remove('show');
+        matchState.bannerTimer = 0;
+
+        respawnFighter(player, SPAWN_PLAYER);
+        respawnFighter(bot, SPAWN_BOT);
+      }
+
+      function applyGameModeUI() {
+        const isZen = matchState.mode === 'zen';
+        bot.rig.root.visible = !isZen;
+        botWaterVis.mesh.visible = !isZen;
+        botWaterVis.dropInst.visible = !isZen;
+
+        document.getElementById('bot-score-side').classList.toggle('hidden', isZen);
+        document.getElementById('bot-hp-card').classList.toggle('hidden', isZen);
+        document.getElementById('score-divider-badge').textContent = isZen ? 'ZEN PLAYGROUND' : 'FIRST TO 5';
+        document.getElementById('selected-mode-tag').textContent = isZen ? 'PEACEFUL FREE-ROAM' : '1V1 DUEL';
+      }
+
+      function applyCameraLookDelta(dx, dy, sensX, sensY) {
+        const mode = matchState.invertMode;
+        const invertX = (mode === 'xy');
+        const invertY = (mode === 'xy' || mode === 'y');
+
+        matchState.camYaw += (invertX ? 1 : -1) * dx * sensX;
+        matchState.camPitch = Math.max(
+          -0.65,
+          Math.min(0.72, matchState.camPitch + (invertY ? 1 : -1) * dy * sensY)
+        );
+      }
+
+      function cycleCameraInvertMode(announce) {
+        const order = ['off', 'xy', 'y'];
+        const nextIdx = (order.indexOf(matchState.invertMode) + 1) % order.length;
+        matchState.invertMode = order[nextIdx];
+
+        const labelEl = document.getElementById('invert-mode-label');
+        if (matchState.invertMode === 'xy') {
+          labelEl.textContent = 'Invert: X+Y';
+          if (announce && matchState.started && !matchState.over) showBanner('CAMERA: INVERT X+Y');
+        } else if (matchState.invertMode === 'y') {
+          labelEl.textContent = 'Invert: Y Only';
+          if (announce && matchState.started && !matchState.over) showBanner('CAMERA: INVERT Y ONLY');
+        } else {
+          labelEl.textContent = 'Invert: OFF';
+          if (announce && matchState.started && !matchState.over) showBanner('CAMERA: INVERT OFF');
+        }
+      }
+
+      function showBanner(text) {
+        const el = document.getElementById('banner-toast');
+        el.textContent = text;
+        el.classList.add('show');
+        matchState.bannerTimer = 1.9;
+      }
+
+      function updateScoreAndHealthHUD() {
+        document.getElementById('score-player').textContent = String(player.score);
+        document.getElementById('score-bot').textContent = String(bot.score);
+
+        const pHp = Math.max(0, Math.round(player.hp));
+        const bHp = Math.max(0, Math.round(bot.hp));
+        document.getElementById('player-hp-text').textContent = pHp + '%';
+        document.getElementById('bot-hp-text').textContent = bHp + '%';
+        document.getElementById('player-hp-fill').style.width = pHp + '%';
+        document.getElementById('bot-hp-fill').style.width = bHp + '%';
+      }
+
+      function respawnFighter(f, spawnVec) {
+        f.x = spawnVec.x;
+        f.y = spawnVec.y;
+        f.z = spawnVec.z;
+        f.vx = 0;
+        f.vy = 0;
+        f.vz = 0;
+        f.grounded = true;
+        f.coyoteTimer = 0.15;
+        f.hp = 100;
+        f.tank = 100;
+        f.sliding = false;
+        f.slideTimer = 0;
+        f.sprinting = false;
+        f.firing = false;
+        f.jumpType = 'idle';
+        f.jumpTime = 0;
+        f.airTime = 0;
+        f.landImpact = 0;
+        if (f === player) {
+          matchState.camYaw = Math.PI;
+          matchState.camPitch = 0.12;
+        }
+      }
+
+      function handleElimination(victim, cause) {
+        if (matchState.over) return;
+
+        spawnOceanSplashRing(victim.x, victim.z, 2.2);
+        for (let k = 0; k < 28; k++) {
+          const ang = (k / 28) * Math.PI * 2;
+          const spd = 2.4 + Math.random() * 4.2;
+          spawnWaterParticle(
+            victim.team,
+            victim.x,
+            Math.max(0.18, victim.y + 0.35),
+            victim.z,
+            Math.cos(ang) * spd,
+            3.2 + Math.random() * 4.5,
+            Math.sin(ang) * spd,
+            0.85
+          );
+        }
+        SoundFX.playSplash(0.72, 0.16);
+
+        if (victim === bot) {
+          player.score++;
+          player.celebrateTimer = 1.1;
+          showBanner(cause === 'ocean' ? 'BOT FELL IN OCEAN! +1 POINT' : 'BOT SOAKED! +1 POINT');
+          SoundFX.playChime(true);
+        } else {
+          if (matchState.mode === 'zen') {
+            showBanner('SPLASHED IN DEEP WATER! RESPAWNING...');
+            SoundFX.playChime(false);
+            updateScoreAndHealthHUD();
+            respawnFighter(player, SPAWN_PLAYER);
+            return;
+          }
+          bot.score++;
+          bot.celebrateTimer = 1.1;
+          showBanner(cause === 'ocean' ? 'FELL IN DEEP WATER! BOT +1' : 'YOU GOT SOAKED! BOT +1');
+          SoundFX.playChime(false);
+        }
+
+        updateScoreAndHealthHUD();
+
+        if (player.score >= matchState.winScore || bot.score >= matchState.winScore) {
+          matchState.over = true;
+          SoundFX.setJetStream(false, 0);
+          if (document.pointerLockElement === canvasEl) {
+            try { document.exitPointerLock(); } catch (err) {}
+          }
+          document.getElementById('pointer-hint').classList.add('hidden');
+          const playerWon = player.score >= matchState.winScore;
+          document.getElementById('gameover-badge').textContent = playerWon ? 'AERO CHAMPION' : 'SOAKED OUT';
+          document.getElementById('gameover-title').textContent = playerWon ? 'VICTORY SPLASH!' : 'DEFEAT!';
+          document.getElementById('gameover-sub').textContent = playerWon
+            ? `You dominated the inflatable arena ${player.score} – ${bot.score}!`
+            : `The rival bot soaked you ${bot.score} – ${player.score}. Ready for a rematch?`;
+          document.getElementById('gameover-modal').classList.remove('hidden');
+          return;
+        }
+
+        respawnFighter(victim, victim === player ? SPAWN_PLAYER : SPAWN_BOT);
+      }
+
+      // Query highest walkable support surface beneath (x, z) including safe floating water pads
+      function getSupportHeightAt(x, z, footY) {
+        let bestY = -999.0;
+        const r = 0.30;
+        for (let c = 0; c < arenaColliders.length; c++) {
+          const col = arenaColliders[c];
+          if (col.type === 'box') {
+            if (x + r >= col.minX && x - r <= col.maxX && z + r >= col.minZ && z - r <= col.maxZ) {
+              if (col.maxY <= footY + STEP_UP_MAX && col.maxY > bestY) {
+                bestY = col.maxY;
+              }
+            }
+          } else if (col.type === 'ramp') {
+            if (x + r >= col.minX && x - r <= col.maxX && z + r >= col.minZ && z - r <= col.maxZ) {
+              const clampedX = Math.max(col.minX, Math.min(col.maxX, x));
+              const t = (clampedX - col.minX) / Math.max(0.01, col.maxX - col.minX);
+              const rampY = col.y0 + t * (col.y1 - col.y0);
+              if (rampY <= footY + STEP_UP_MAX + 0.14 && rampY > bestY) {
+                bestY = rampY;
+              }
+            }
+          } else if (col.type === 'cylinder') {
+            const d = Math.hypot(x - col.x, z - col.z);
+            if (d <= col.r + r * 0.6) {
+              if (col.maxY <= footY + STEP_UP_MAX && col.maxY > bestY) {
+                bestY = col.maxY;
+              }
+            }
+          }
+        }
+
+        // Check safe floating lily pads & aero rafts on the water
+        for (let i = 0; i < waterFloats.length; i++) {
+          const wf = waterFloats[i];
+          const surfaceY = wf.baseY + wf.bobOffset - wf.dip;
+          if (surfaceY <= footY + STEP_UP_MAX && surfaceY > bestY) {
+            if (wf.shape === 'circle') {
+              if (Math.hypot(x - wf.x, z - wf.z) <= wf.r + r * 0.55) {
+                bestY = surfaceY;
+              }
+            } else {
+              if (Math.abs(x - wf.x) <= wf.hw + r * 0.55 && Math.abs(z - wf.z) <= wf.hd + r * 0.55) {
+                bestY = surfaceY;
+              }
+            }
+          }
+        }
+
+        return bestY;
+      }
+
+      // Decoupled Vertical-Then-Horizontal Physics + 3-Tier Jump Classification
+      function stepFighterPhysics(f, dt, wishX, wishZ, wantSprint, wantSlide, wantJump) {
+        if (f.slideCooldown > 0) f.slideCooldown -= dt;
+        if (f.hitFlinch > 0) f.hitFlinch = Math.max(0, f.hitFlinch - dt * 4.5);
+        if (f.celebrateTimer > 0) f.celebrateTimer = Math.max(0, f.celebrateTimer - dt);
+
+        const wishLen = Math.hypot(wishX, wishZ);
+        const dirX = wishLen > 1e-4 ? (wishX / wishLen) : 0;
+        const dirZ = wishLen > 1e-4 ? (wishZ / wishLen) : 0;
+
+        // Trigger Ground Slide (Shift + C or Touch Slide)
+        if (wantSlide && f.grounded && !f.sliding && f.slideCooldown <= 0) {
+          f.sliding = true;
+          f.slideTimer = 0.66;
+          f.slideCooldown = 0.88;
+          if (wishLen > 0.1) {
+            f.slideDirX = dirX;
+            f.slideDirZ = dirZ;
+          } else {
+            f.slideDirX = Math.sin(f.yaw);
+            f.slideDirZ = Math.cos(f.yaw);
+          }
+          f.vx = f.slideDirX * 12.2;
+          f.vz = f.slideDirZ * 12.2;
+          SoundFX.playSlide();
+        }
+
+        if (f.sliding) {
+          f.slideTimer -= dt;
+          const slideSpeed = 7.4 + 4.8 * Math.max(0, f.slideTimer / 0.66);
+          f.vx = f.slideDirX * slideSpeed;
+          f.vz = f.slideDirZ * slideSpeed;
+
+          if (Math.random() < 0.65) {
+            spawnWaterParticle(
+              f.team,
+              f.x + (Math.random() - 0.5) * 0.34,
+              f.y + 0.08,
+              f.z + (Math.random() - 0.5) * 0.34,
+              -f.slideDirX * 1.4 + (Math.random() - 0.5) * 1.6,
+              1.3 + Math.random() * 1.2,
+              -f.slideDirZ * 1.4 + (Math.random() - 0.5) * 1.6,
+              0.38
+            );
+          }
+
+          if (f.slideTimer <= 0) {
+            f.sliding = false;
+          }
+        } else {
+          f.sprinting = !!(wantSprint && wishLen > 0.15 && f.grounded);
+          const targetSpeed = wishLen > 0.05 ? (f.sprinting ? 10.2 : 6.4) : 0.0;
+          const targetVx = dirX * targetSpeed;
+          const targetVz = dirZ * targetSpeed;
+          const accel = f.grounded ? 26.0 : 10.0;
+          const blend = Math.min(1.0, accel * dt);
+          f.vx += (targetVx - f.vx) * blend;
+          f.vz += (targetVz - f.vz) * blend;
+        }
+
+        if (f.grounded) {
+          f.coyoteTimer = 0.12;
+        } else {
+          f.coyoteTimer = Math.max(0, f.coyoteTimer - dt);
+        }
+
+        // Classify jump takeoff into Standing ('idle'), Walk ('walk'), or Sprint ('sprint')
+        if (wantJump && (f.grounded || f.coyoteTimer > 0)) {
+          const takeoffSpeed = Math.hypot(f.vx, f.vz);
+          if (f.sprinting || takeoffSpeed > 7.6) {
+            f.jumpType = 'sprint';
+            f.vy = 8.9;
+            // Forward momentum boost on sprint hurdle leap
+            const hLen = Math.max(0.01, takeoffSpeed);
+            f.vx += (f.vx / hLen) * 1.45;
+            f.vz += (f.vz / hLen) * 1.45;
+          } else if (takeoffSpeed > 1.25 || wishLen > 0.15) {
+            f.jumpType = 'walk';
+            f.vy = 8.45;
+          } else {
+            f.jumpType = 'idle';
+            f.vy = 8.35;
+          }
+
+          f.jumpLeadSign = Math.sin(f.animPhase) >= 0 ? 1 : -1;
+          f.jumpTime = 0;
+          f.airTime = 0;
+          f.grounded = false;
+          f.coyoteTimer = 0;
+          f.sliding = false;
+          SoundFX.playStep(true);
+        }
+
+        // -----------------------------------------------------------------------
+        // PASS 1: VERTICAL INTEGRATION & GROUND / RAMP / FLOAT SNAPPING
+        // -----------------------------------------------------------------------
+        const wasGrounded = f.grounded;
+        const prevY = f.y;
+        f.vy -= GRAVITY * dt;
+        f.y += f.vy * dt;
+
+        const supportY = getSupportHeightAt(f.x, f.z, prevY);
+        if (supportY > -100.0 && f.vy <= 0.0) {
+          if (f.y <= supportY + 0.04 && prevY >= supportY - STEP_UP_MAX) {
+            f.y = supportY;
+            f.vy = 0;
+            f.grounded = true;
+          } else {
+            f.grounded = false;
+          }
+        } else if (f.vy > 0.0) {
+          f.grounded = false;
+        } else {
+          f.grounded = false;
+        }
+
+        // Touchdown impact absorption & camera landing dip
+        if (!wasGrounded && f.grounded) {
+          const impact = Math.min(1.0, Math.max(0.32, f.airTime * 1.45));
+          f.landImpact = impact;
+          if (f === player) {
+            matchState.camLandDip = Math.max(matchState.camLandDip, impact * 0.24);
+          }
+          SoundFX.playStep(f.jumpType === 'sprint');
+        }
+
+        if (!f.grounded) {
+          f.jumpTime += dt;
+          f.airTime += dt;
+        } else {
+          f.airTime = 0;
+        }
+
+        // Bouncy Trampoline Pads (only on main deck at DECK_Y)
+        if (Math.abs(f.y - DECK_Y) < 0.35 && f.vy <= 0.5) {
+          for (let t = 0; t < trampolinePads.length; t++) {
+            const pad = trampolinePads[t];
+            if (Math.hypot(f.x - pad.x, f.z - pad.z) < pad.r) {
+              f.y = DECK_Y + 0.05;
+              f.vy = 13.8;
+              f.grounded = false;
+              f.coyoteTimer = 0;
+              f.sliding = false;
+              f.jumpType = Math.hypot(f.vx, f.vz) > 4.0 ? 'sprint' : 'idle';
+              f.jumpTime = 0;
+              f.airTime = 0;
+              pad.squish = 1.0;
+              SoundFX.playBounce();
+            }
+          }
+        }
+
+        // -----------------------------------------------------------------------
+        // PASS 2: HORIZONTAL INTEGRATION & TRUE WALL / PILLAR RESOLUTION
+        // -----------------------------------------------------------------------
+        f.x += f.vx * dt;
+        f.z += f.vz * dt;
+
+        const bodyR = 0.34;
+        const bodyH = f.sliding ? SLIDE_HEIGHT : STAND_HEIGHT;
+
+        for (let c = 0; c < arenaColliders.length; c++) {
+          const col = arenaColliders[c];
+          if (col.type === 'box') {
+            if (col.maxY <= f.y + STEP_UP_MAX) continue;
+            if (col.minY >= f.y + bodyH - 0.04) continue;
+
+            const closestX = Math.max(col.minX, Math.min(col.maxX, f.x));
+            const closestZ = Math.max(col.minZ, Math.min(col.maxZ, f.z));
+            const dx = f.x - closestX;
+            const dz = f.z - closestZ;
+            const d2 = dx * dx + dz * dz;
+            if (d2 < bodyR * bodyR) {
+              if (d2 > 1e-6) {
+                const d = Math.sqrt(d2);
+                const pen = bodyR - d;
+                const nx = dx / d;
+                const nz = dz / d;
+                f.x += nx * pen;
+                f.z += nz * pen;
+                const vn = f.vx * nx + f.vz * nz;
+                if (vn < 0) {
+                  f.vx -= vn * nx;
+                  f.vz -= vn * nz;
+                }
+              } else {
+                const penL = Math.abs(f.x - col.minX);
+                const penR = Math.abs(col.maxX - f.x);
+                const penB = Math.abs(f.z - col.minZ);
+                const penF = Math.abs(col.maxZ - f.z);
+                const m = Math.min(penL, penR, penB, penF);
+                if (m === penL) { f.x = col.minX - bodyR; f.vx = Math.min(0, f.vx); }
+                else if (m === penR) { f.x = col.maxX + bodyR; f.vx = Math.max(0, f.vx); }
+                else if (m === penB) { f.z = col.minZ - bodyR; f.vz = Math.min(0, f.vz); }
+                else { f.z = col.maxZ + bodyR; f.vz = Math.max(0, f.vz); }
+              }
+            }
+          } else if (col.type === 'cylinder') {
+            if (col.maxY <= f.y + STEP_UP_MAX || col.minY >= f.y + bodyH) continue;
+            const dx = f.x - col.x;
+            const dz = f.z - col.z;
+            const minD = col.r + bodyR;
+            const d2 = dx * dx + dz * dz;
+            if (d2 < minD * minD && d2 > 1e-6) {
+              const d = Math.sqrt(d2);
+              const nx = dx / d;
+              const nz = dz / d;
+              f.x = col.x + nx * minD;
+              f.z = col.z + nz * minD;
+              const vn = f.vx * nx + f.vz * nz;
+              if (vn < 0) {
+                f.vx -= vn * nx;
+                f.vz -= vn * nz;
+              }
+            }
+          }
+        }
+
+        // Smoothly climb ramps when moving horizontally across them
+        const postHorizSupportY = getSupportHeightAt(f.x, f.z, f.y);
+        if (postHorizSupportY > f.y && postHorizSupportY <= f.y + STEP_UP_MAX && f.vy <= 0.0) {
+          f.y = postHorizSupportY;
+          f.vy = 0;
+          f.grounded = true;
+        }
+
+        // Push giant beach balls on contact
+        for (let b = 0; b < dynamicInflatables.length; b++) {
+          const obj = dynamicInflatables[b];
+          if (obj.onOcean) continue;
+          const dx = obj.x - f.x;
+          const dz = obj.z - f.z;
+          const minD = obj.r + bodyR;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < minD * minD && d2 > 1e-6 && f.y < obj.y + obj.r) {
+            const d = Math.sqrt(d2);
+            const nx = dx / d;
+            const nz = dz / d;
+            const overlap = minD - d;
+            obj.x += nx * overlap * 0.85;
+            obj.z += nz * overlap * 0.85;
+            obj.vx += nx * 4.5;
+            obj.vz += nz * 4.5;
+            obj.vy = Math.max(obj.vy, 1.4);
+          }
+        }
+
+        // INSTANT ELIMINATION UPON FALLING INTO DEEP OCEAN WATER (Y <= 0.06)
+        if (f.y <= 0.06) {
+          handleElimination(f, 'ocean');
+          return;
+        }
+
+        // Footstep Audio & Animation Cycle
+        const horizSpeed = Math.hypot(f.vx, f.vz);
+        if (f.grounded && !f.sliding && horizSpeed > 0.6) {
+          const prevStep = Math.floor(f.stepAccum);
+          f.stepAccum += horizSpeed * dt * (f.sprinting ? 0.56 : 0.46);
+          if (Math.floor(f.stepAccum) > prevStep) {
+            SoundFX.playStep(f.sprinting);
+          }
+        }
+        f.animPhase += dt * (1.8 + horizSpeed * (f.sprinting ? 1.55 : 1.32));
+      }
+
+      // =========================================================================
+      // 10. HIGH-PRESSURE WATER JET FIRING & HIT DETECTION
+      // =========================================================================
+      const tempMuzzlePos = new THREE.Vector3();
+      const tempAimDir = new THREE.Vector3();
+
+      function updateFighterFiring(f, dt, aimTargetPos) {
+        if (f.firing && f.tank > 1.5) {
+          f.tank = Math.max(0, f.tank - dt * 21.0);
+          f.fireAccum += dt;
+          const rate = 0.015;
+          while (f.fireAccum >= rate && f.tank > 0.5) {
+            f.fireAccum -= rate;
+            f.rig.root.updateMatrixWorld(true);
+            f.rig.blaster.muzzlePoint.getWorldPosition(tempMuzzlePos);
+
+            tempAimDir.copy(aimTargetPos).sub(tempMuzzlePos);
+            if (tempAimDir.lengthSq() < 1e-5) {
+              tempAimDir.set(Math.sin(f.yaw), 0, Math.cos(f.yaw));
+            } else {
+              tempAimDir.normalize();
+            }
+
+            const jetSpeed = 24.5;
+            const spread = f === player ? 0.018 : 0.062;
+            const vx0 = tempAimDir.x * jetSpeed + (Math.random() - 0.5) * spread * jetSpeed + f.vx * 0.16;
+            const vy0 = tempAimDir.y * jetSpeed + (Math.random() - 0.5) * spread * jetSpeed + 0.72;
+            const vz0 = tempAimDir.z * jetSpeed + (Math.random() - 0.5) * spread * jetSpeed + f.vz * 0.16;
+
+            spawnWaterParticle(
+              f.team,
+              tempMuzzlePos.x,
+              tempMuzzlePos.y,
+              tempMuzzlePos.z,
+              vx0,
+              vy0,
+              vz0,
+              1.18
+            );
+          }
+        } else {
+          f.firing = false;
+          f.fireAccum = 0;
+          f.tank = Math.min(100, f.tank + dt * 27.0);
+        }
+
+        const ratio = Math.max(0.04, f.tank / 100.0);
+        f.rig.blaster.waterCore.scale.z = ratio;
+      }
+
+      function checkFluidCombatHits() {
+        const hitR = 0.50;
+        const hitR2 = hitR * hitR;
+
+        for (let i = activeFluidCount - 1; i >= 0; i--) {
+          const team = owner[i];
+          const target = team === TEAM_PLAYER ? bot : player;
+          const targetH = target.sliding ? SLIDE_HEIGHT : STAND_HEIGHT;
+
+          if (py[i] >= target.y - 0.05 && py[i] <= target.y + targetH + 0.10) {
+            const dx = px[i] - target.x;
+            const dz = pz[i] - target.z;
+            if (dx * dx + dz * dz < hitR2) {
+              const dmg = team === TEAM_PLAYER ? 3.5 : 1.75;
+              target.hp -= dmg;
+              target.hitFlinch = 1.0;
+
+              const hLen = Math.max(0.1, Math.hypot(vx[i], vz[i]));
+              target.vx += (vx[i] / hLen) * 1.15;
+              target.vz += (vz[i] / hLen) * 1.15;
+
+              if (team === TEAM_PLAYER) {
+                matchState.hitmarkerTimer = 0.14;
+                SoundFX.playSplash(1.45, 0.05);
+              } else {
+                SoundFX.playSplash(0.95, 0.04);
+              }
+
+              removeFluidParticle(i);
+              updateScoreAndHealthHUD();
+
+              if (target.hp <= 0) {
+                handleElimination(target, 'soaked');
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // =========================================================================
+      // 11. PROCEDURAL 3-TIER JUMP & BIOMECHANICAL KINEMATICS ENGINE
+      // =========================================================================
+      function smoothPose(p, alpha, target) {
+        for (const k in target) {
+          p[k] += (target[k] - p[k]) * alpha;
+        }
+      }
+
+      function animateFighterRig(f, dt, nowSec) {
+        const rig = f.rig;
+        rig.root.position.set(f.x, f.y, f.z);
+        rig.root.rotation.y = f.yaw;
+
+        // Track angular turn velocity for banking & turn-in-place footwork
+        let dYaw = f.yaw - f.prevYaw;
+        while (dYaw > Math.PI) dYaw -= Math.PI * 2;
+        while (dYaw < -Math.PI) dYaw += Math.PI * 2;
+        f.prevYaw = f.yaw;
+        const instantYawRate = dYaw / Math.max(0.004, dt);
+        f.yawRate += (instantYawRate - f.yawRate) * Math.min(1.0, dt * 14.0);
+
+        if (f.landImpact > 0) {
+          f.landImpact = Math.max(0, f.landImpact - dt * 5.2);
+        }
+
+        const speed = Math.hypot(f.vx, f.vz);
+        const runBlend = Math.min(1.0, speed / 7.5);
+        const phase = f.animPhase;
+
+        // Decompose velocity into local forward & lateral strafe axes
+        const fwdX = Math.sin(f.yaw);
+        const fwdZ = Math.cos(f.yaw);
+        const rightX = -fwdZ;
+        const rightZ = fwdX;
+        const fwdSpeed = f.vx * fwdX + f.vz * fwdZ;
+        const strafeSpeed = f.vx * rightX + f.vz * rightZ;
+        const fwdRatio = Math.max(-1, Math.min(1, fwdSpeed / 7.5));
+        const strafeRatio = Math.max(-1, Math.min(1, strafeSpeed / 7.5));
+        const backpedal = fwdSpeed < -0.5 ? Math.min(1.0, -fwdSpeed / 5.0) : 0;
+
+        // Lateral turn banking
+        const targetBank = Math.max(-0.22, Math.min(0.22, -f.yawRate * 0.032 * runBlend - strafeRatio * 0.09));
+        f.bankRoll += (targetBank - f.bankRoll) * Math.min(1.0, dt * 12.0);
+
+        // Secondary spring-damper physics for dorsal helmet crest fin
+        const targetCrestPitch = (!f.grounded ? f.vy * 0.045 : 0) + (f.sprinting ? -0.32 : -0.10 * runBlend) + f.landImpact * 0.28;
+        const targetCrestRoll = f.bankRoll * 1.6;
+        f.crestPitchVel += ((targetCrestPitch - f.crestPitch) * 140.0 - f.crestPitchVel * 14.0) * dt;
+        f.crestPitch += f.crestPitchVel * dt;
+        f.crestRollVel += ((targetCrestRoll - f.crestRoll) * 140.0 - f.crestRollVel * 14.0) * dt;
+        f.crestRoll += f.crestRollVel * dt;
+        rig.crestPivot.rotation.set(f.crestPitch, 0, f.crestRoll);
+
+        // Twin Hydro-Booster Backpack pulse
+        const boostPulse = 1.0 + (f.firing ? Math.sin(nowSec * 36.0) * 0.16 : 0) + (!f.grounded ? 0.18 : 0);
+        for (let b = 0; b < rig.boosterRings.length; b++) {
+          rig.boosterRings[b].scale.setScalar(boostPulse);
+        }
+
+        // Hydro-Blaster muzzle water cone & vortex ring + pump reciprocation
+        const pumpOffset = f.firing ? Math.sin(nowSec * 28.0) * 0.032 : 0;
+        rig.blaster.pumpGroup.position.z = 0.26 + pumpOffset;
+        rig.blaster.muzzleCone.visible = f.firing;
+        rig.blaster.muzzleRing.visible = f.firing;
+        if (f.firing) {
+          const coneScale = 0.85 + Math.sin(nowSec * 52.0) * 0.28;
+          rig.blaster.muzzleCone.scale.set(coneScale, 0.9 + Math.cos(nowSec * 44.0) * 0.22, coneScale);
+          rig.blaster.muzzleRing.rotation.z = nowSec * 14.0;
+          const ringPulse = 0.8 + ((nowSec * 9.0) % 1.0) * 0.75;
+          rig.blaster.muzzleRing.scale.setScalar(ringPulse);
+        }
+
+        const p = f.pose;
+        const dampAlpha = Math.min(1.0, dt * 18.0);
+        const celebWave = f.celebrateTimer > 0 ? Math.sin(nowSec * 16.0) * (f.celebrateTimer / 1.1) : 0;
+
+        if (f.sliding) {
+          smoothPose(p, dampAlpha, {
+            hipsY: 0.36,
+            hipsZ: -0.05,
+            hipsRotX: -0.85,
+            hipsRotY: 0,
+            hipsRotZ: f.bankRoll * 0.6,
+            torsoX: 0.28,
+            torsoY: 0,
+            torsoZ: f.bankRoll * 0.4,
+            headX: 0.55 - f.pitch * 0.4,
+            headY: 0,
+            headZ: -f.bankRoll * 0.5,
+            rShX: -0.75 - f.pitch * 0.5,
+            rShY: 0.04,
+            rShZ: 0,
+            rElbX: -0.35,
+            lShX: 0.45,
+            lShY: 0,
+            lShZ: 0.35,
+            lElbX: -0.4,
+            lHipX: -0.55,
+            lHipY: 0.12,
+            lHipZ: 0.06,
+            lKneeX: 0.15,
+            lAnkX: 0.22,
+            lAnkZ: 0,
+            rHipX: 0.45,
+            rHipY: -0.15,
+            rHipZ: -0.06,
+            rKneeX: 1.35,
+            rAnkX: 0.30,
+            rAnkZ: 0
+          });
+        } else if (!f.grounded) {
+          // =====================================================================
+          // 3 DISTINCT AIRBORNE JUMP ANIMATIONS: IDLE, WALK-TO-JUMP, SPRINT-TO-JUMP
+          // =====================================================================
+          const ascendRatio = Math.max(0, Math.min(1, f.vy / 8.5));
+          const descendRatio = Math.max(0, Math.min(1, -f.vy / 9.5));
+          const apexTuck = Math.max(0, 1.0 - Math.abs(f.vy) / 5.5);
+
+          if (f.jumpType === 'sprint') {
+            // 3. SPRINT-TO-JUMP: Parkour Hurdle Leap -> Scissor-to-Tuck -> Forward Landing Reach
+            const lead = f.jumpLeadSign;
+            const hurdleBlend = Math.max(0, 1.0 - f.jumpTime * 1.65);
+            const leadHipX = (-1.02 * hurdleBlend - 0.52 * (1.0 - hurdleBlend)) + descendRatio * 0.26;
+            const leadKneeX = (1.38 * hurdleBlend + 0.78 * (1.0 - hurdleBlend)) - descendRatio * 0.44;
+            const trailHipX = (0.56 * hurdleBlend - 0.34 * (1.0 - hurdleBlend)) + descendRatio * 0.14;
+            const trailKneeX = (0.72 * hurdleBlend + 0.64 * (1.0 - hurdleBlend)) - descendRatio * 0.34;
+
+            const lHipX = lead > 0 ? leadHipX : trailHipX;
+            const lKneeX = lead > 0 ? leadKneeX : trailKneeX;
+            const rHipX = lead > 0 ? trailHipX : leadHipX;
+            const rKneeX = lead > 0 ? trailKneeX : leadKneeX;
+
+            smoothPose(p, dampAlpha, {
+              hipsY: 0.76 + apexTuck * 0.04,
+              hipsZ: 0.03 * hurdleBlend,
+              hipsRotX: 0.16 * ascendRatio - 0.06 * descendRatio,
+              hipsRotY: lead * 0.14 * hurdleBlend,
+              hipsRotZ: f.bankRoll + lead * 0.07 * hurdleBlend,
+              torsoX: 0.32 * (1.0 - descendRatio * 0.45),
+              torsoY: -lead * 0.16 * hurdleBlend,
+              torsoZ: f.bankRoll * 0.6,
+              headX: -0.26 - f.pitch * 0.72,
+              headY: 0,
+              headZ: -f.bankRoll * 0.8,
+              rShX: -1.32 - f.pitch * 0.85,
+              rShY: 0.06,
+              rShZ: 0,
+              rElbX: -0.24,
+              lShX: -0.45 - lead * 0.35 * hurdleBlend,
+              lShY: -0.1,
+              lShZ: 0.32,
+              lElbX: -0.82,
+              lHipX,
+              lHipY: 0.04,
+              lHipZ: 0.08,
+              lKneeX,
+              lAnkX: -0.22 * apexTuck + 0.24 * descendRatio,
+              lAnkZ: 0,
+              rHipX,
+              rHipY: -0.04,
+              rHipZ: -0.08,
+              rKneeX,
+              rAnkX: -0.22 * apexTuck + 0.24 * descendRatio,
+              rAnkZ: 0
+            });
+          } else if (f.jumpType === 'walk') {
+            // 2. WALK-TO-JUMP: Mid-Stride Knee Drive & Contralateral Arm Swing
+            const lead = f.jumpLeadSign;
+            const stridePhase = Math.max(0, 1.0 - f.jumpTime * 1.45);
+            const leadHipX = (-0.78 * stridePhase - 0.36 * (1.0 - stridePhase)) + descendRatio * 0.18;
+            const leadKneeX = (1.12 * stridePhase + 0.62 * (1.0 - stridePhase)) - descendRatio * 0.34;
+            const trailHipX = (0.36 * stridePhase - 0.22 * (1.0 - stridePhase));
+            const trailKneeX = (0.44 * stridePhase + 0.48 * (1.0 - stridePhase)) - descendRatio * 0.22;
+
+            const lHipX = lead > 0 ? leadHipX : trailHipX;
+            const lKneeX = lead > 0 ? leadKneeX : trailKneeX;
+            const rHipX = lead > 0 ? trailHipX : leadHipX;
+            const rKneeX = lead > 0 ? trailKneeX : leadKneeX;
+
+            smoothPose(p, dampAlpha, {
+              hipsY: 0.75 + apexTuck * 0.03,
+              hipsZ: 0,
+              hipsRotX: 0.08 * ascendRatio - 0.04 * descendRatio,
+              hipsRotY: lead * 0.09 * stridePhase,
+              hipsRotZ: f.bankRoll * 0.8,
+              torsoX: 0.16,
+              torsoY: -lead * 0.11 * stridePhase,
+              torsoZ: f.bankRoll * 0.5,
+              headX: -0.15 - f.pitch * 0.70,
+              headY: 0,
+              headZ: -f.bankRoll * 0.7,
+              rShX: -1.35 - f.pitch * 0.85,
+              rShY: 0.06,
+              rShZ: 0,
+              rElbX: -0.26,
+              lShX: -0.35 - lead * 0.28 * stridePhase,
+              lShY: -0.12,
+              lShZ: 0.26,
+              lElbX: -0.72,
+              lHipX,
+              lHipY: 0.02,
+              lHipZ: 0.07,
+              lKneeX,
+              lAnkX: -0.18 * apexTuck + 0.20 * descendRatio,
+              lAnkZ: 0,
+              rHipX,
+              rHipY: -0.02,
+              rHipZ: -0.07,
+              rKneeX,
+              rAnkX: -0.18 * apexTuck + 0.20 * descendRatio,
+              rAnkZ: 0
+            });
+          } else {
+            // 1. STANDING / IDLE JUMP: Symmetrical Vertical Coil, Apex Two-Knee Tuck & Clean Two-Foot Extension
+            const tuckAmt = 0.45 * ascendRatio + 0.82 * apexTuck;
+            const symHipX = -tuckAmt + descendRatio * 0.26;
+            const symKneeX = (0.72 * ascendRatio + 1.26 * apexTuck) + descendRatio * 0.34;
+
+            smoothPose(p, dampAlpha, {
+              hipsY: 0.75 + apexTuck * 0.035,
+              hipsZ: 0,
+              hipsRotX: 0.05 * ascendRatio - 0.05 * descendRatio,
+              hipsRotY: 0,
+              hipsRotZ: f.bankRoll * 0.5,
+              torsoX: 0.06 + apexTuck * 0.08,
+              torsoY: 0,
+              torsoZ: f.bankRoll * 0.4,
+              headX: -0.08 - f.pitch * 0.68,
+              headY: 0,
+              headZ: -f.bankRoll * 0.5,
+              rShX: -1.34 - f.pitch * 0.85,
+              rShY: 0.06,
+              rShZ: 0,
+              rElbX: -0.28,
+              lShX: -0.52 - apexTuck * 0.18,
+              lShY: -0.08,
+              lShZ: 0.36 + apexTuck * 0.14,
+              lElbX: -0.68,
+              lHipX: symHipX - 0.03,
+              lHipY: 0.03,
+              lHipZ: 0.09,
+              lKneeX: symKneeX + 0.04,
+              lAnkX: -0.25 * apexTuck + 0.22 * descendRatio,
+              lAnkZ: 0,
+              rHipX: symHipX + 0.03,
+              rHipY: -0.03,
+              rHipZ: -0.09,
+              rKneeX: symKneeX - 0.04,
+              rAnkX: -0.25 * apexTuck + 0.22 * descendRatio,
+              rAnkZ: 0
+            });
+          }
+        } else {
+          // =====================================================================
+          // GROUNDED LOCOMOTION: IDLE, WALK, SPRINT, BACKPEDAL, STRAFE & LANDING
+          // =====================================================================
+          const squashY = f.landImpact * 0.15;
+          const bounce = Math.abs(Math.sin(phase)) * (f.sprinting ? 0.062 : 0.046) * runBlend;
+          const idleBreath = Math.sin(nowSec * 3.0) * 0.014 * (1.0 - runBlend);
+          const turnStep = Math.min(0.28, Math.abs(f.yawRate) * 0.04) * (1.0 - runBlend);
+
+          const dirSign = backpedal > 0.35 ? -1 : 1;
+          const strideAmp = ((f.sprinting ? 0.94 : 0.66) * runBlend + turnStep) * dirSign;
+          const lSwing = Math.sin(phase) * strideAmp;
+          const rSwing = -Math.sin(phase) * strideAmp;
+
+          const lKneeLift = Math.max(0, -Math.cos(phase) * dirSign) * (f.sprinting ? 1.02 : 0.84) * runBlend;
+          const rKneeLift = Math.max(0, Math.cos(phase) * dirSign) * (f.sprinting ? 1.02 : 0.84) * runBlend;
+          const landKneeFlex = f.landImpact * 0.56;
+
+          const lKneeX = lKneeLift + landKneeFlex + 0.05;
+          const rKneeX = rKneeLift + landKneeFlex + 0.05;
+
+          // Heel-to-toe ankle articulation
+          const lAnkX = Math.cos(phase) * 0.24 * runBlend - landKneeFlex * 0.45;
+          const rAnkX = -Math.cos(phase) * 0.24 * runBlend - landKneeFlex * 0.45;
+
+          const lHipZ = 0.04 + Math.max(0, Math.sin(phase) * strafeRatio * 0.24);
+          const rHipZ = -0.04 + Math.min(0, -Math.sin(phase) * strafeRatio * 0.24);
+
+          const forwardLean = (f.sprinting ? 0.25 : 0.11 * fwdRatio) + f.hitFlinch * 0.16 + f.landImpact * 0.18;
+          const recoil = f.firing ? Math.sin(nowSec * 45.0) * 0.045 : 0;
+
+          // Two-handed tactical bracing when firing on ground, or athletic arm swing when running
+          const lShX = f.firing
+            ? (-0.95 - f.pitch * 0.55)
+            : (-0.35 - Math.sin(phase) * 0.44 * runBlend * dirSign + celebWave * 0.6);
+          const lShY = f.firing ? -0.42 : -0.15;
+          const lShZ = f.firing ? -0.22 : (0.18 + Math.abs(celebWave) * 0.45);
+          const lElbX = f.firing ? -0.82 : (-0.68 - Math.abs(celebWave) * 0.35);
+
+          smoothPose(p, dampAlpha, {
+            hipsY: 0.74 + bounce + idleBreath - squashY,
+            hipsZ: 0,
+            hipsRotX: f.landImpact * 0.10,
+            hipsRotY: Math.sin(phase) * 0.08 * runBlend,
+            hipsRotZ: f.bankRoll,
+            torsoX: forwardLean,
+            torsoY: -Math.sin(phase) * 0.10 * runBlend,
+            torsoZ: f.bankRoll * 0.55,
+            headX: -forwardLean * 0.65 - f.pitch * 0.72 + Math.sin(nowSec * 1.9) * 0.025 * (1.0 - runBlend),
+            headY: Math.sin(nowSec * 1.1) * 0.04 * (1.0 - runBlend),
+            headZ: -f.bankRoll * 0.85,
+            rShX: -1.38 - f.pitch * 0.85 - forwardLean + recoil,
+            rShY: 0.06,
+            rShZ: 0,
+            rElbX: -0.24,
+            lShX,
+            lShY,
+            lShZ,
+            lElbX,
+            lHipX: lSwing - landKneeFlex * 0.48,
+            lHipY: strafeRatio * 0.18 * runBlend,
+            lHipZ,
+            lKneeX,
+            lAnkX,
+            lAnkZ: -f.bankRoll * 0.5,
+            rHipX: rSwing - landKneeFlex * 0.48,
+            rHipY: strafeRatio * 0.18 * runBlend,
+            rHipZ,
+            rKneeX,
+            rAnkX,
+            rAnkZ: -f.bankRoll * 0.5
+          });
+        }
+
+        // Apply smoothed pose values to hierarchical Three.js rig joints
+        rig.hipsPivot.position.set(0, p.hipsY, p.hipsZ);
+        rig.hipsPivot.rotation.set(p.hipsRotX, p.hipsRotY, p.hipsRotZ);
+        rig.torsoPivot.rotation.set(p.torsoX, p.torsoY, p.torsoZ);
+        rig.headPivot.rotation.set(p.headX, p.headY, p.headZ);
+
+        rig.rightShoulder.rotation.set(p.rShX, p.rShY, p.rShZ);
+        rig.rightElbow.rotation.set(p.rElbX, 0, 0);
+        rig.leftShoulder.rotation.set(p.lShX, p.lShY, p.lShZ);
+        rig.leftElbow.rotation.set(p.lElbX, 0, 0);
+
+        rig.leftHip.rotation.set(p.lHipX, p.lHipY, p.lHipZ);
+        rig.leftKnee.rotation.set(p.lKneeX, 0, 0);
+        rig.leftAnkle.rotation.set(p.lAnkX, 0, p.lAnkZ);
+
+        rig.rightHip.rotation.set(p.rHipX, p.rHipY, p.rHipZ);
+        rig.rightKnee.rotation.set(p.rKneeX, 0, 0);
+        rig.rightAnkle.rotation.set(p.rAnkX, 0, p.rAnkZ);
+      }
+
+      // =========================================================================
+      // 12. MID-SKILL BOT AI (DECK-SAFE NAVIGATION, COVER & BURST AIMING)
+      // =========================================================================
+      function updateBotAI(dt, nowSec) {
+        botAI.wayTimer -= dt;
+        botAI.strafeTimer -= dt;
+        botAI.burstTimer -= dt;
+        botAI.jumpTimer -= dt;
+
+        const distToPlayer = Math.hypot(player.x - bot.x, player.z - bot.z);
+
+        // Pick safe waypoints inside the inflatable playground deck
+        if (botAI.wayTimer <= 0 || Math.hypot(botAI.wayX - bot.x, botAI.wayZ - bot.z) < 1.1) {
+          botAI.wayTimer = 1.9 + Math.random() * 1.6;
+          if (distToPlayer > 9.5) {
+            botAI.wayX = Math.max(-6.5, Math.min(6.5, player.x * 0.45 + (Math.random() - 0.5) * 4.5));
+            botAI.wayZ = Math.max(-5.8, Math.min(5.8, player.z * 0.45 + (Math.random() - 0.5) * 4.5));
+          } else {
+            const spots = [
+              [-4.2, -3.5], [4.2, -3.5], [-4.5, 2.2], [4.5, 2.2],
+              [-2.2, -5.2], [2.2, -5.2], [0.0, 2.4], [0.0, -2.4]
+            ];
+            const pick = spots[Math.floor(Math.random() * spots.length)];
+            botAI.wayX = pick[0] + (Math.random() - 0.5) * 1.2;
+            botAI.wayZ = pick[1] + (Math.random() - 0.5) * 1.2;
+          }
+        }
+
+        if (botAI.strafeTimer <= 0) {
+          botAI.strafeTimer = 0.9 + Math.random() * 1.2;
+          botAI.strafeDir = Math.random() < 0.5 ? 1 : -1;
+        }
+
+        let toWayX = botAI.wayX - bot.x;
+        let toWayZ = botAI.wayZ - bot.z;
+        const wayLen = Math.max(0.01, Math.hypot(toWayX, toWayZ));
+        toWayX /= wayLen;
+        toWayZ /= wayLen;
+
+        const toPlayerX = player.x - bot.x;
+        const toPlayerZ = player.z - bot.z;
+        const pLen = Math.max(0.01, Math.hypot(toPlayerX, toPlayerZ));
+        const perpX = -(toPlayerZ / pLen) * botAI.strafeDir;
+        const perpZ = (toPlayerX / pLen) * botAI.strafeDir;
+
+        let wishX = toWayX * 0.65 + perpX * 0.55;
+        let wishZ = toWayZ * 0.65 + perpZ * 0.55;
+
+        // Edge-avoidance steering: keep bot safely away from open ocean drop-offs
+        if (Math.abs(bot.x) > 6.8) wishX = -Math.sign(bot.x) * 1.2;
+        if (Math.abs(bot.z) > 6.0) wishZ = -Math.sign(bot.z) * 1.2;
+
+        const wantSprint = distToPlayer > 11.0;
+        const wantJump = botAI.jumpTimer <= 0 && bot.grounded && Math.abs(bot.x) < 6.2 && Math.abs(bot.z) < 5.4;
+        if (wantJump) {
+          botAI.jumpTimer = 2.8 + Math.random() * 2.5;
+        }
+
+        stepFighterPhysics(bot, dt, wishX, wishZ, wantSprint, false, wantJump);
+
+        // Mid-skill aim tracking with gentle lag and periodic sway
+        const aimLag = Math.min(1.0, dt * 3.8);
+        const swayX = Math.sin(nowSec * 2.4) * 0.42;
+        const swayZ = Math.cos(nowSec * 2.1) * 0.42;
+        botAI.aimX += ((player.x + swayX) - botAI.aimX) * aimLag;
+        botAI.aimY += ((player.y + (player.sliding ? 0.42 : 0.88)) - botAI.aimY) * aimLag;
+        botAI.aimZ += ((player.z + swayZ) - botAI.aimZ) * aimLag;
+
+        const aimDx = botAI.aimX - bot.x;
+        const aimDz = botAI.aimZ - bot.z;
+        bot.yaw = Math.atan2(aimDx, aimDz);
+        const flatDist = Math.max(0.5, Math.hypot(aimDx, aimDz));
+        bot.pitch = Math.max(-0.45, Math.min(0.55, Math.atan2(botAI.aimY - (bot.y + 0.95), flatDist)));
+
+        if (botAI.burstTimer <= 0) {
+          botAI.burstFiring = !botAI.burstFiring;
+          botAI.burstTimer = botAI.burstFiring
+            ? (0.85 + Math.random() * 0.95)
+            : (0.65 + Math.random() * 0.75);
+        }
+
+        bot.firing = botAI.burstFiring && distToPlayer < 17.5 && bot.tank > 14;
+        updateFighterFiring(bot, dt, new THREE.Vector3(botAI.aimX, botAI.aimY, botAI.aimZ));
+      }
+
+      // =========================================================================
+      // 13. DESKTOP (POINTER LOCK + WASD + Q START SCREEN) & MOBILE MULTI-TOUCH
+      // =========================================================================
+      const keys = {
+        w: false, a: false, s: false, d: false,
+        shift: false, c: false, space: false
+      };
+      let mouseDown = false;
+      let lastMouseX = 0;
+      let lastMouseY = 0;
+
+      const touchInput = {
+        mode: 'auto',
+        joyId: -1,
+        joyOriginX: 0,
+        joyOriginY: 0,
+        joyX: 0,
+        joyY: 0,
+        joySprint: false,
+        lookId: -1,
+        lastLookX: 0,
+        lastLookY: 0,
+        shootActive: false,
+        jumpTrigger: false,
+        slideTrigger: false
+      };
+
+      const mobileControlsEl = document.getElementById('mobile-controls');
+      const touchModeLabel = document.getElementById('touch-mode-label');
+      const pointerHintEl = document.getElementById('pointer-hint');
+
+      function updateMobileControlsVisibility() {
+        const show = touchInput.mode === 'on' || (touchInput.mode === 'auto' && isMobileDevice);
+        mobileControlsEl.classList.toggle('hidden', !show);
+        touchModeLabel.textContent = touchInput.mode === 'auto' ? 'Touch: Auto' : (touchInput.mode === 'on' ? 'Touch: ON' : 'Touch: OFF');
+        updatePointerHintVisibility();
+      }
+
+      function updatePointerHintVisibility() {
+        const touchShowing = !mobileControlsEl.classList.contains('hidden');
+        const locked = document.pointerLockElement === canvasEl;
+        const showHint = matchState.started && !matchState.over && !touchShowing && !locked && !!canvasEl.requestPointerLock;
+        pointerHintEl.classList.toggle('hidden', !showHint);
+      }
+
+      updateMobileControlsVisibility();
+
+      document.getElementById('btn-start-screen-hud').addEventListener('click', (e) => {
+        e.stopPropagation();
+        returnToStartScreen();
+      });
+
+      document.getElementById('btn-toggle-touch').addEventListener('click', (e) => {
+        e.stopPropagation();
+        touchInput.mode = touchInput.mode === 'auto' ? 'on' : (touchInput.mode === 'on' ? 'off' : 'auto');
+        updateMobileControlsVisibility();
+      });
+
+      document.getElementById('btn-toggle-invert').addEventListener('click', (e) => {
+        e.stopPropagation();
+        cycleCameraInvertMode(true);
+      });
+
+      document.getElementById('btn-toggle-audio').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOn = SoundFX.toggle();
+        document.getElementById('icon-audio-on').classList.toggle('hidden', !isOn);
+        document.getElementById('icon-audio-off').classList.toggle('hidden', isOn);
+      });
+
+      // Suit Color Swatches
+      document.querySelectorAll('.char-swatch').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.char-swatch').forEach((b) => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          const hex = btn.getAttribute('data-color') || '#94a3b8';
+          const name = btn.getAttribute('data-name') || 'COOL GRAY';
+          document.getElementById('selected-color-name').textContent = name;
+          player.rig.suitMat.color.set(hex);
+        });
+      });
+
+      // Game Mode Selector (Arena Duel vs. Zen Playground)
+      document.querySelectorAll('.mode-option-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.mode-option-btn').forEach((b) => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          matchState.mode = btn.getAttribute('data-mode') === 'zen' ? 'zen' : 'duel';
+          applyGameModeUI();
+        });
+      });
+
+      function requestCanvasPointerLock() {
+        if (canvasEl.requestPointerLock && !isMobileDevice && touchInput.mode !== 'on') {
+          try {
+            canvasEl.requestPointerLock();
+          } catch (err) {}
+        }
+      }
+
+      function startNewMatch() {
+        SoundFX.ensure();
+        activeFluidCount = 0;
+        player.score = 0;
+        bot.score = 0;
+        applyGameModeUI();
+        respawnFighter(player, SPAWN_PLAYER);
+        respawnFighter(bot, SPAWN_BOT);
+        updateScoreAndHealthHUD();
+        matchState.over = false;
+        matchState.started = true;
+        document.getElementById('start-modal').classList.add('hidden');
+        document.getElementById('gameover-modal').classList.add('hidden');
+        requestCanvasPointerLock();
+        updatePointerHintVisibility();
+        showBanner(matchState.mode === 'zen' ? 'ZEN PLAYGROUND · EXPLORE & HOP FLOATS!' : 'SOAK THE BOT · HOP SAFE WATER FLOATS!');
+      }
+
+      document.getElementById('btn-start-game').addEventListener('click', startNewMatch);
+      document.getElementById('btn-rematch').addEventListener('click', startNewMatch);
+      document.getElementById('btn-start-screen-over').addEventListener('click', returnToStartScreen);
+      pointerHintEl.addEventListener('click', requestCanvasPointerLock);
+      document.addEventListener('pointerlockchange', updatePointerHintVisibility);
+
+      // Keyboard Controls (including Q to return to Start Screen)
+      window.addEventListener('keydown', (e) => {
+        const code = e.code;
+        if (code === 'KeyW' || code === 'ArrowUp') keys.w = true;
+        if (code === 'KeyA' || code === 'ArrowLeft') keys.a = true;
+        if (code === 'KeyS' || code === 'ArrowDown') keys.s = true;
+        if (code === 'KeyD' || code === 'ArrowRight') keys.d = true;
+        if (code === 'ShiftLeft' || code === 'ShiftRight') keys.shift = true;
+        if (code === 'KeyC') keys.c = true;
+        if (code === 'Space') {
+          keys.space = true;
+          if (matchState.started) e.preventDefault();
+        }
+        if (code === 'KeyR' && matchState.started) {
+          player.tank = Math.min(100, player.tank + 35);
+          SoundFX.playSplash(1.5, 0.05);
+        }
+        if (code === 'KeyI' && !e.repeat) {
+          cycleCameraInvertMode(true);
+        }
+        if (code === 'KeyQ' && !e.repeat && matchState.started) {
+          returnToStartScreen();
+        }
+      });
+
+      window.addEventListener('keyup', (e) => {
+        const code = e.code;
+        if (code === 'KeyW' || code === 'ArrowUp') keys.w = false;
+        if (code === 'KeyA' || code === 'ArrowLeft') keys.a = false;
+        if (code === 'KeyS' || code === 'ArrowDown') keys.s = false;
+        if (code === 'KeyD' || code === 'ArrowRight') keys.d = false;
+        if (code === 'ShiftLeft' || code === 'ShiftRight') keys.shift = false;
+        if (code === 'KeyC') keys.c = false;
+        if (code === 'Space') keys.space = false;
+      });
+
+      // Mouse Aim (Locked to Center via Pointer Lock + Drag Fallback) & Press Click to Shoot
+      canvasEl.addEventListener('mousedown', (e) => {
+        if (!matchState.started || matchState.over) return;
+        SoundFX.ensure();
+        if (e.button === 0) {
+          mouseDown = true;
+          lastMouseX = e.clientX;
+          lastMouseY = e.clientY;
+          if (document.pointerLockElement !== canvasEl) {
+            requestCanvasPointerLock();
+          }
+        }
+      });
+
+      window.addEventListener('mouseup', (e) => {
+        if (e.button === 0) mouseDown = false;
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!matchState.started || matchState.over) return;
+        if (document.pointerLockElement === canvasEl) {
+          applyCameraLookDelta(e.movementX, e.movementY, 0.0023, 0.0021);
+        } else if (mouseDown) {
+          const dx = e.clientX - lastMouseX;
+          const dy = e.clientY - lastMouseY;
+          lastMouseX = e.clientX;
+          lastMouseY = e.clientY;
+          applyCameraLookDelta(dx, dy, 0.0042, 0.0038);
+        }
+      });
+
+      // Mobile Multi-Touch Virtual Joystick
+      const joyZone = document.getElementById('joystick-zone');
+      const joyKnob = document.getElementById('joystick-knob');
+
+      function updateJoystickVisual(dx, dy) {
+        const maxR = 40;
+        const dist = Math.hypot(dx, dy);
+        const clamped = dist > maxR ? maxR / dist : 1.0;
+        const cx = dx * clamped;
+        const cy = dy * clamped;
+        joyKnob.style.transform = `translate3d(${cx.toFixed(1)}px, ${cy.toFixed(1)}px, 0)`;
+        touchInput.joyX = cx / maxR;
+        touchInput.joyY = cy / maxR;
+        touchInput.joySprint = dist > maxR * 0.82;
+      }
+
+      joyZone.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        SoundFX.ensure();
+        if (touchInput.joyId === -1 && e.changedTouches.length > 0) {
+          const t = e.changedTouches[0];
+          const rect = joyZone.getBoundingClientRect();
+          touchInput.joyId = t.identifier;
+          touchInput.joyOriginX = rect.left + rect.width * 0.5;
+          touchInput.joyOriginY = rect.top + rect.height * 0.5;
+          joyZone.classList.add('active');
+          updateJoystickVisual(t.clientX - touchInput.joyOriginX, t.clientY - touchInput.joyOriginY);
+        }
+      }, { passive: false });
+
+      joyZone.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (t.identifier === touchInput.joyId) {
+            updateJoystickVisual(t.clientX - touchInput.joyOriginX, t.clientY - touchInput.joyOriginY);
+            break;
+          }
+        }
+      }, { passive: false });
+
+      const endJoyTouch = (e) => {
+        e.stopPropagation();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === touchInput.joyId) {
+            touchInput.joyId = -1;
+            touchInput.joyX = 0;
+            touchInput.joyY = 0;
+            touchInput.joySprint = false;
+            joyZone.classList.remove('active');
+            joyKnob.style.transform = 'translate3d(0, 0, 0)';
+            break;
+          }
+        }
+      };
+      joyZone.addEventListener('touchend', endJoyTouch);
+      joyZone.addEventListener('touchcancel', endJoyTouch);
+
+      // Mobile Action Buttons (Shoot, Jump, Slide)
+      const btnTouchShoot = document.getElementById('btn-touch-shoot');
+      const btnTouchJump = document.getElementById('btn-touch-jump');
+      const btnTouchSlide = document.getElementById('btn-touch-slide');
+
+      btnTouchShoot.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        SoundFX.ensure();
+        touchInput.shootActive = true;
+        btnTouchShoot.classList.add('pressed');
+      }, { passive: false });
+      const endShootTouch = (e) => {
+        e.stopPropagation();
+        touchInput.shootActive = false;
+        btnTouchShoot.classList.remove('pressed');
+      };
+      btnTouchShoot.addEventListener('touchend', endShootTouch);
+      btnTouchShoot.addEventListener('touchcancel', endShootTouch);
+
+      btnTouchJump.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        SoundFX.ensure();
+        touchInput.jumpTrigger = true;
+        btnTouchJump.classList.add('pressed');
+      }, { passive: false });
+      const endJumpTouch = (e) => {
+        e.stopPropagation();
+        touchInput.jumpTrigger = false;
+        btnTouchJump.classList.remove('pressed');
+      };
+      btnTouchJump.addEventListener('touchend', endJumpTouch);
+      btnTouchJump.addEventListener('touchcancel', endJumpTouch);
+
+      btnTouchSlide.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        SoundFX.ensure();
+        touchInput.slideTrigger = true;
+        btnTouchSlide.classList.add('pressed');
+      }, { passive: false });
+      const endSlideTouch = (e) => {
+        e.stopPropagation();
+        touchInput.slideTrigger = false;
+        btnTouchSlide.classList.remove('pressed');
+      };
+      btnTouchSlide.addEventListener('touchend', endSlideTouch);
+      btnTouchSlide.addEventListener('touchcancel', endSlideTouch);
+
+      // Mobile Viewport Finger Swipes to Move Camera
+      canvasEl.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        SoundFX.ensure();
+        if (touchInput.lookId === -1 && e.changedTouches.length > 0) {
+          const t = e.changedTouches[0];
+          touchInput.lookId = t.identifier;
+          touchInput.lastLookX = t.clientX;
+          touchInput.lastLookY = t.clientY;
+        }
+      }, { passive: false });
+
+      canvasEl.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (t.identifier === touchInput.lookId) {
+            const dx = t.clientX - touchInput.lastLookX;
+            const dy = t.clientY - touchInput.lastLookY;
+            touchInput.lastLookX = t.clientX;
+            touchInput.lastLookY = t.clientY;
+            applyCameraLookDelta(dx, dy, 0.0055, 0.0048);
+            break;
+          }
+        }
+      }, { passive: false });
+
+      const endLookTouch = (e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === touchInput.lookId) {
+            touchInput.lookId = -1;
+            break;
+          }
+        }
+      };
+      canvasEl.addEventListener('touchend', endLookTouch);
+      canvasEl.addEventListener('touchcancel', endLookTouch);
+
+      // =========================================================================
+      // 14. OVER-THE-SHOULDER CAMERA & EXACT CENTER-RETICLE AIM RAYCASTING
+      // =========================================================================
+      const centerRaycaster = new THREE.Raycaster();
+      const centerNDC = new THREE.Vector2(0, 0);
+      const camPivot = new THREE.Vector3();
+      const camOffset = new THREE.Vector3();
+      const camDesiredPos = new THREE.Vector3();
+      const camLookPoint = new THREE.Vector3();
+      const aimTargetWorld = new THREE.Vector3();
+
+      function updateCameraAndComputeAim(dt) {
+        const targetFov = player.sprinting ? 64 : (player.sliding ? 61 : 56);
+        matchState.currentFov += (targetFov - matchState.currentFov) * Math.min(1.0, dt * 10.0);
+        if (Math.abs(camera.fov - matchState.currentFov) > 0.05) {
+          camera.fov = matchState.currentFov;
+          camera.updateProjectionMatrix();
+        }
+
+        if (matchState.camLandDip > 0) {
+          matchState.camLandDip = Math.max(0, matchState.camLandDip - dt * 1.4);
+        }
+
+        const eyeHeight = (player.sliding ? 0.68 : 1.18) - matchState.camLandDip;
+        camPivot.set(player.x, player.y + eyeHeight, player.z);
+
+        const sinY = Math.sin(matchState.camYaw);
+        const cosY = Math.cos(matchState.camYaw);
+        const cosP = Math.cos(matchState.camPitch);
+        const sinP = Math.sin(matchState.camPitch);
+
+        const forwardX = sinY * cosP;
+        const forwardY = sinP;
+        const forwardZ = cosY * cosP;
+
+        const rightX = -cosY;
+        const rightZ = sinY;
+
+        const shoulderDist = 0.48;
+        const camBackDist = 3.15;
+
+        camOffset.set(
+          -forwardX * camBackDist + rightX * shoulderDist,
+          -forwardY * camBackDist + 0.16,
+          -forwardZ * camBackDist + rightZ * shoulderDist
+        );
+
+        camDesiredPos.copy(camPivot).add(camOffset);
+
+        if (camDesiredPos.y < 0.35) {
+          camDesiredPos.y = 0.35;
+        }
+
+        const toCam = camDesiredPos.clone().sub(camPivot);
+        const maxCamDist = toCam.length();
+        if (maxCamDist > 0.1) {
+          const rayDir = toCam.clone().divideScalar(maxCamDist);
+          centerRaycaster.set(camPivot, rayDir);
+          centerRaycaster.far = maxCamDist;
+          const hits = centerRaycaster.intersectObjects(arenaGroup.children, true);
+          if (hits.length > 0 && hits[0].distance < maxCamDist) {
+            const safeDist = Math.max(0.65, hits[0].distance - 0.25);
+            camDesiredPos.copy(camPivot).addScaledVector(rayDir, safeDist);
+          }
+        }
+
+        camera.position.copy(camDesiredPos);
+
+        const focalDist = 28.0;
+        camLookPoint.set(
+          camPivot.x + rightX * shoulderDist + forwardX * focalDist,
+          camPivot.y + 0.16 + forwardY * focalDist,
+          camPivot.z + rightZ * shoulderDist + forwardZ * focalDist
+        );
+        camera.lookAt(camLookPoint);
+        camera.updateMatrixWorld();
+
+        centerRaycaster.setFromCamera(centerNDC, camera);
+        centerRaycaster.far = 45.0;
+
+        let closestT = 34.0;
+        matchState.aimOnBot = false;
+
+        const ro = centerRaycaster.ray.origin;
+        const rd = centerRaycaster.ray.direction;
+        if (matchState.mode !== 'zen') {
+          const botCenterY = bot.y + (bot.sliding ? 0.39 : 0.74);
+          const bx = bot.x - ro.x;
+          const by = botCenterY - ro.y;
+          const bz = bot.z - ro.z;
+          const tProj = bx * rd.x + by * rd.y + bz * rd.z;
+          if (tProj > 1.2 && tProj < closestT) {
+            const perpX = bx - rd.x * tProj;
+            const perpY = (by - rd.y * tProj) * 0.58;
+            const perpZ = bz - rd.z * tProj;
+            if (perpX * perpX + perpY * perpY + perpZ * perpZ < 0.48 * 0.48) {
+              closestT = tProj;
+              matchState.aimOnBot = true;
+            }
+          }
+        }
+
+        const envHits = centerRaycaster.intersectObjects(arenaGroup.children, true);
+        if (envHits.length > 0 && envHits[0].distance > 1.2 && envHits[0].distance < closestT) {
+          closestT = envHits[0].distance;
+          matchState.aimOnBot = false;
+        }
+
+        aimTargetWorld.copy(ro).addScaledVector(rd, closestT);
+
+        player.yaw = Math.atan2(aimTargetWorld.x - player.x, aimTargetWorld.z - player.z);
+        const flatAimD = Math.max(0.5, Math.hypot(aimTargetWorld.x - player.x, aimTargetWorld.z - player.z));
+        player.pitch = Math.max(-0.58, Math.min(0.68, Math.atan2(aimTargetWorld.y - (player.y + 0.95), flatAimD)));
+      }
+
+      // =========================================================================
+      // 15. MAIN 60 FPS SIMULATION & RENDER LOOP
+      // =========================================================================
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
+        renderer.setSize(window.innerWidth, window.innerHeight, false);
+      });
+
+      const hudFps = document.getElementById('hud-fps');
+      const tankBarFill = document.getElementById('tank-bar-fill');
+      const tankPctText = document.getElementById('tank-pct-text');
+      const moveStateLabel = document.getElementById('move-state-label');
+      const moveStateDot = document.getElementById('move-state-dot');
+      const crosshairWrap = document.getElementById('crosshair-wrap');
+      const crosshairRing = document.getElementById('crosshair-ring');
+      const chTickN = document.getElementById('ch-tick-n');
+      const chTickS = document.getElementById('ch-tick-s');
+      const chTickW = document.getElementById('ch-tick-w');
+      const chTickE = document.getElementById('ch-tick-e');
+      const hitmarkerEl = document.getElementById('hitmarker');
+      const bannerToastEl = document.getElementById('banner-toast');
+
+      let lastTime = performance.now();
+      let fpsFrames = 0;
+      let fpsTimer = 0;
+
+      function animate(now) {
+        requestAnimationFrame(animate);
+
+        const rawDt = (now - lastTime) * 0.001;
+        lastTime = now;
+        const dt = Math.min(0.033, Math.max(0.004, rawDt));
+        const nowSec = now * 0.001;
+
+        fpsFrames++;
+        fpsTimer += rawDt;
+        if (fpsTimer >= 0.4) {
+          hudFps.textContent = Math.min(120, Math.round(fpsFrames / fpsTimer)) + ' FPS';
+          fpsFrames = 0;
+          fpsTimer = 0;
+        }
+
+        oceanUniforms.uTime.value = nowSec;
+
+        for (let i = 0; i < palmCanopies.length; i++) {
+          const pc = palmCanopies[i];
+          pc.group.rotation.z = Math.sin(nowSec * 1.6 + pc.phase) * 0.07;
+          pc.group.rotation.x = Math.cos(nowSec * 1.3 + pc.phase) * 0.05;
+        }
+
+        for (let i = 0; i < clouds.length; i++) {
+          clouds[i].group.position.x += clouds[i].speed * dt;
+          if (clouds[i].group.position.x > 85) clouds[i].group.position.x = -85;
+        }
+
+        for (let i = 0; i < aeroBubbles.length; i++) {
+          const b = aeroBubbles[i];
+          b.mesh.position.y += b.speed * dt;
+          b.mesh.position.x = b.baseX + Math.sin(nowSec * 1.4 + b.phase) * 0.35;
+          b.mesh.position.z = b.baseZ + Math.cos(nowSec * 1.2 + b.phase) * 0.35;
+          const wob = Math.sin(nowSec * 4.2 + b.phase) * 0.08;
+          b.mesh.scale.set(b.baseR * (1 + wob), b.baseR * (1 - wob), b.baseR * (1 + wob));
+          if (b.mesh.position.y > 7.5) b.mesh.position.y = 0.6;
+        }
+
+        // Articulated 2-Segment Seagulls
+        for (let i = 0; i < seagulls.length; i++) {
+          const g = seagulls[i];
+          g.angle += g.speed * dt;
+          const gx = Math.cos(g.angle) * g.orbitR;
+          const gz = Math.sin(g.angle) * g.orbitR;
+          g.group.position.set(gx, g.height + Math.sin(nowSec * 2.0 + i) * 0.5, gz);
+          g.group.rotation.y = -g.angle;
+          g.group.rotation.z = 0.14;
+          const innerFlap = Math.sin(nowSec * 8.5 + i * 1.3) * 0.42;
+          const outerFlap = Math.sin(nowSec * 8.5 + i * 1.3 - 0.65) * 0.35;
+          g.leftInner.rotation.z = innerFlap;
+          g.leftOuter.rotation.z = outerFlap;
+          g.rightInner.rotation.z = -innerFlap;
+          g.rightOuter.rotation.z = -outerFlap;
+        }
+
+        // Leaping Lagoon Fish
+        for (let i = 0; i < lagoonFish.length; i++) {
+          const lf = lagoonFish[i];
+          if (!lf.active) {
+            lf.timer -= dt;
+            if (lf.timer <= 0) {
+              lf.active = true;
+              lf.progress = 0;
+              const ang = Math.random() * Math.PI * 2;
+              const dist = 12.5 + Math.random() * 6.5;
+              lf.startX = Math.cos(ang) * dist;
+              lf.startZ = Math.sin(ang) * dist;
+              lf.dirX = -Math.sin(ang);
+              lf.dirZ = Math.cos(ang);
+              lf.group.visible = true;
+              spawnOceanSplashRing(lf.startX, lf.startZ, 0.9);
+            }
+          } else {
+            lf.progress += dt * 0.95;
+            const t = lf.progress;
+            const arcSpan = 2.6;
+            const fx = lf.startX + lf.dirX * (t * arcSpan);
+            const fz = lf.startZ + lf.dirZ * (t * arcSpan);
+            const fy = Math.sin(t * Math.PI) * 1.25 - 0.12;
+            lf.group.position.set(fx, fy, fz);
+            lf.group.rotation.y = Math.atan2(lf.dirX, lf.dirZ);
+            lf.group.rotation.x = -Math.cos(t * Math.PI) * 0.85;
+            lf.tail.rotation.y = Math.sin(nowSec * 28.0) * 0.45;
+            if (lf.progress >= 1.0) {
+              lf.active = false;
+              lf.group.visible = false;
+              lf.timer = 2.8 + Math.random() * 4.5;
+              spawnOceanSplashRing(fx, fz, 0.9);
+            }
+          }
+        }
+
+        // Spring-Damper Trampoline Pads
+        for (let t = 0; t < trampolinePads.length; t++) {
+          const pad = trampolinePads[t];
+          if (pad.squish > 0.001) {
+            pad.squish *= Math.pow(0.05, dt);
+            const sy = 1.0 - pad.squish * 0.35;
+            const sxz = 1.0 + pad.squish * 0.16;
+            pad.mesh.scale.set(sxz, sy, sxz);
+          } else {
+            pad.mesh.scale.set(1, 1, 1);
+          }
+        }
+
+        // Buoyant Water Floats (Lily Pads & Aero Rafts)
+        for (let i = 0; i < waterFloats.length; i++) {
+          const wf = waterFloats[i];
+          wf.bobOffset = Math.sin(nowSec * 2.1 + wf.phase) * 0.045;
+
+          let targetDip = 0;
+          let targetTiltX = Math.cos(nowSec * 1.7 + wf.phase) * 0.03;
+          let targetTiltZ = Math.sin(nowSec * 1.5 + wf.phase) * 0.03;
+
+          const fighters = matchState.mode === 'zen' ? [player] : [player, bot];
+          for (let k = 0; k < fighters.length; k++) {
+            const f = fighters[k];
+            const dx = f.x - wf.x;
+            const dz = f.z - wf.z;
+            const onThisFloat = wf.shape === 'circle'
+              ? (Math.hypot(dx, dz) <= wf.r + 0.15)
+              : (Math.abs(dx) <= wf.hw + 0.15 && Math.abs(dz) <= wf.hd + 0.15);
+            if (onThisFloat && Math.abs(f.y - (wf.baseY + wf.bobOffset - wf.dip)) < 0.25) {
+              targetDip = 0.085;
+              targetTiltX += dz * 0.08;
+              targetTiltZ -= dx * 0.08;
+            }
+          }
+
+          wf.dipVel += ((targetDip - wf.dip) * 75.0 - wf.dipVel * 9.5) * dt;
+          wf.dip += wf.dipVel * dt;
+          wf.tiltX += (targetTiltX - wf.tiltX) * Math.min(1.0, dt * 8.0);
+          wf.tiltZ += (targetTiltZ - wf.tiltZ) * Math.min(1.0, dt * 8.0);
+
+          wf.mesh.position.y = wf.baseY + wf.bobOffset - wf.dip;
+          wf.mesh.rotation.x = wf.tiltX;
+          wf.mesh.rotation.z = wf.tiltZ;
+        }
+
+        for (let i = 0; i < dynamicInflatables.length; i++) {
+          const obj = dynamicInflatables[i];
+          if (obj.onOcean) {
+            obj.vx *= 0.96;
+            obj.vz *= 0.96;
+            obj.x += obj.vx * dt;
+            obj.z += obj.vz * dt;
+            obj.y = (obj.type === 'ring' ? 0.08 : obj.r * 0.58) + Math.sin(nowSec * 2.2 + obj.phase) * 0.06;
+            obj.mesh.position.set(obj.x, obj.y, obj.z);
+            obj.mesh.rotation.y += obj.wy * dt;
+            obj.mesh.rotation.z = Math.sin(nowSec * 1.8 + obj.phase) * 0.08;
+          } else {
+            obj.vy -= 18.0 * dt;
+            obj.vx *= 0.97;
+            obj.vz *= 0.97;
+            obj.x += obj.vx * dt;
+            obj.y += obj.vy * dt;
+            obj.z += obj.vz * dt;
+            if (isPointOverDeck(obj.x, obj.z, 0.25) && obj.y < DECK_Y + obj.r) {
+              obj.y = DECK_Y + obj.r;
+              if (obj.vy < 0) obj.vy = -obj.vy * 0.45;
+            }
+            if (obj.y < obj.r * 0.58) {
+              obj.y = obj.r * 0.58;
+              obj.vy = 0;
+            }
+            obj.mesh.position.set(obj.x, obj.y, obj.z);
+            obj.mesh.rotation.x += obj.vz * dt * 1.6;
+            obj.mesh.rotation.z -= obj.vx * dt * 1.6;
+          }
+        }
+
+        for (let i = splashRings.length - 1; i >= 0; i--) {
+          const sr = splashRings[i];
+          sr.age += dt;
+          const sc = sr.baseScale + sr.age * 4.2;
+          sr.mesh.scale.set(sc, 1, sc);
+          sr.mesh.material.opacity = Math.max(0, 0.82 * (1.0 - sr.age / 0.58));
+          if (sr.age >= 0.58) {
+            scene.remove(sr.mesh);
+            sr.mesh.material.dispose();
+            splashRings.splice(i, 1);
+          }
+        }
+
+        if (matchState.started && !matchState.over) {
+          let moveForward = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
+          let moveRight = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+
+          if (Math.abs(touchInput.joyX) > 0.08 || Math.abs(touchInput.joyY) > 0.08) {
+            moveForward = -touchInput.joyY;
+            moveRight = touchInput.joyX;
+          }
+
+          const sinY = Math.sin(matchState.camYaw);
+          const cosY = Math.cos(matchState.camYaw);
+          const worldWishX = sinY * moveForward - cosY * moveRight;
+          const worldWishZ = cosY * moveForward + sinY * moveRight;
+
+          const wantSprint = (keys.shift && moveForward > 0.2) || touchInput.joySprint;
+          const wantSlide = (keys.shift && keys.c) || touchInput.slideTrigger;
+          const wantJump = keys.space || touchInput.jumpTrigger;
+
+          stepFighterPhysics(player, dt, worldWishX, worldWishZ, wantSprint, wantSlide, wantJump);
+          updateCameraAndComputeAim(dt);
+
+          player.firing = (mouseDown || touchInput.shootActive) && player.tank > 2.0;
+          updateFighterFiring(player, dt, aimTargetWorld);
+
+          SoundFX.setJetStream(player.firing, player.tank / 100.0);
+
+          if (matchState.mode !== 'zen') {
+            updateBotAI(dt, nowSec);
+          }
+
+          stepHydroMeshPhysics(dt);
+          if (matchState.mode !== 'zen') {
+            checkFluidCombatHits();
+          }
+
+          // Update HUD Indicators
+          const tankPct = Math.round(player.tank);
+          tankBarFill.style.width = tankPct + '%';
+          tankPctText.textContent = tankPct + '%';
+
+          if (player.sliding) {
+            moveStateLabel.textContent = 'HYDRO SLIDING (LOW PROFILE)';
+            moveStateDot.style.background = '#22c55e';
+          } else if (player.sprinting) {
+            moveStateLabel.textContent = 'AERO SPRINTING';
+            moveStateDot.style.background = '#38bdf8';
+          } else if (!player.grounded) {
+            const jLabel = player.jumpType === 'sprint'
+              ? 'SPRINT HURDLE JUMP'
+              : (player.jumpType === 'walk' ? 'STRIDE JUMP' : 'VERTICAL JUMP');
+            moveStateLabel.textContent = jLabel;
+            moveStateDot.style.background = '#facc15';
+          } else {
+            moveStateLabel.textContent = 'HOP WATER FLOATS · Q START SCREEN';
+            moveStateDot.style.background = '#00b4ff';
+          }
+
+          crosshairWrap.classList.toggle('on-target', matchState.aimOnBot);
+          const ringSize = player.firing ? 30 : (matchState.aimOnBot ? 28 : (player.sprinting ? 29 : 24));
+          crosshairRing.style.width = ringSize + 'px';
+          crosshairRing.style.height = ringSize + 'px';
+          const tickSpread = (player.firing ? 5 : 0) + (player.sprinting ? 3 : 0) + (!player.grounded ? 4 : 0);
+          chTickN.style.transform = `translateY(${-tickSpread}px)`;
+          chTickS.style.transform = `translateY(${tickSpread}px)`;
+          chTickW.style.transform = `translateX(${-tickSpread}px)`;
+          chTickE.style.transform = `translateX(${tickSpread}px)`;
+        } else {
+          // Idle Demo Camera Orbit on Start / End Screen
+          SoundFX.setJetStream(false, 0);
+          const orbitAng = nowSec * 0.24;
+          camera.position.set(Math.sin(orbitAng) * 14.5, 6.2, Math.cos(orbitAng) * 14.5);
+          camera.lookAt(0, 1.1, 0);
+        }
+
+        if (matchState.hitmarkerTimer > 0) {
+          matchState.hitmarkerTimer -= dt;
+          hitmarkerEl.classList.add('active');
+        } else {
+          hitmarkerEl.classList.remove('active');
+        }
+
+        if (matchState.bannerTimer > 0) {
+          matchState.bannerTimer -= dt;
+          if (matchState.bannerTimer <= 0) {
+            bannerToastEl.classList.remove('show');
+          }
+        }
+
+        animateFighterRig(player, dt, nowSec);
+        if (matchState.mode !== 'zen') {
+          animateFighterRig(bot, dt, nowSec);
+        }
+
+        // Rebuild HydroMesh 3D Surface Nets Isosurfaces + Glossy Droplet Meshes
+        updateTeamHydroSurface(TEAM_PLAYER, playerWaterVis);
+        if (matchState.mode !== 'zen') {
+          updateTeamHydroSurface(TEAM_BOT, botWaterVis);
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      applyGameModeUI();
+      updateScoreAndHealthHUD();
+      requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+</html>
